@@ -77,7 +77,20 @@ def load_roadmap() -> Dict[str, Any]:
     if not ROADMAP_PATH.exists():
         console.print(f"[red]roadmap.json not found at {ROADMAP_PATH}[/red]")
         raise typer.Exit(1)
-    return json.loads(ROADMAP_PATH.read_text())
+    try:
+        return json.loads(ROADMAP_PATH.read_text())
+    except PermissionError as e:
+        # EPERM/EACCES here is almost always macOS Gatekeeper / TCC blocking
+        # first-read access, not a unix file-mode problem.
+        home_hint = '$HOME/Documents/gpu/roadmap.json'
+        console.print(
+            f"[red]PermissionError reading {ROADMAP_PATH} ({e}).[/red]\n"
+            "[yellow]Usually macOS Gatekeeper / TCC blocking first-read access.\n"
+            f"Try:  xattr -d com.apple.provenance '{home_hint}'\n"
+            f"Or:   chmod u+r '{home_hint}'"
+        )
+        raise typer.Exit(1)
+
 
 
 def load_storage() -> Dict[str, Any]:
