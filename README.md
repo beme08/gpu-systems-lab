@@ -89,7 +89,8 @@ This project was built bottom-up so you can ship each version on its own:
 | v0.4 | Reality checks (stored, on-demand `check`) | done |
 | v0.5 | Track-aware schema (cuda / llm / systems / distillation) | done |
 | v0.6 | Open-source polish (LICENSE, pyproject, command rebrand to `gpu`) | done |
-| v0.7 | Benchmark logging (auto-prompt on `done`, `gpu benchmark add/list`) | next |
+| v0.7 | DAG-ready schema + scoring metadata + `resources` + `gpu` alias | done |
+| v0.8 | Benchmark logging + `gpu resources` command + `gpu score` panel | next |
 
 ## Tracks
 
@@ -100,6 +101,17 @@ three (`llm`, `systems`, `distillation`) are placeholders so the schema
 can grow without a rewrite. To add tasks to another track, just add a
 task with `"track": "llm"` (etc.) to the `tasks` array — it will appear
 in that track's bar automatically.
+
+### Resources
+
+Resources (papers, libraries, tools) live in `roadmap.json` under the
+`resources` key. They are not yet exposed as a command in v0.7, but the
+data shape is in place: each entry has `id`, `title`, `url`, `domains`
+(list), `tags` (list), and `difficulty` (beginner | intermediate | advanced).
+
+First resource: **ThunderKittens** (HazyResearch) — a kernels DSL for
+tensor-core attention-style workloads, advanced difficulty. Lives under
+the kernels domain.
 
 ## Swapping Roadmaps
 

@@ -43,7 +43,17 @@
         "cuda_execution_model": 5,
         "pytorch_internals": 5
       },
-      "track": "cuda"
+      "track": "cuda",
+      "prerequisites": [],
+      "unlocks": [
+        "device_query"
+      ],
+      "milestone": "gpu_reality_check_week1",
+      "score": {
+        "impact": 3,
+        "depth": 2,
+        "reproducibility": 5
+      }
     },
     {
       "id": "device_query",
@@ -59,7 +69,19 @@
         "cuda_execution_model": 10,
         "memory_hierarchy": 5
       },
-      "track": "cuda"
+      "track": "cuda",
+      "prerequisites": [
+        "cuda_installed"
+      ],
+      "unlocks": [
+        "bandwidth_test"
+      ],
+      "milestone": "gpu_reality_check_week1",
+      "score": {
+        "impact": 2,
+        "depth": 2,
+        "reproducibility": 5
+      }
     },
     {
       "id": "bandwidth_test",
@@ -75,7 +97,19 @@
         "profiling": 5
       },
       "bottleneck_pick": true,
-      "track": "cuda"
+      "track": "cuda",
+      "prerequisites": [
+        "device_query"
+      ],
+      "unlocks": [
+        "vector_add"
+      ],
+      "milestone": "gpu_reality_check_week1",
+      "score": {
+        "impact": 3,
+        "depth": 3,
+        "reproducibility": 5
+      }
     },
     {
       "id": "vector_add",
@@ -96,7 +130,19 @@
       },
       "reality_check": "Why is vector add usually memory-bound? Answer in 2 sentences.",
       "bottleneck_hint": "memory_bound",
-      "track": "cuda"
+      "track": "cuda",
+      "prerequisites": [
+        "bandwidth_test"
+      ],
+      "unlocks": [
+        "nsys_profile"
+      ],
+      "milestone": "gpu_reality_check_week1",
+      "score": {
+        "impact": 4,
+        "depth": 3,
+        "reproducibility": 4
+      }
     },
     {
       "id": "nsys_profile",
@@ -113,7 +159,19 @@
         "cuda_execution_model": 5
       },
       "bottleneck_pick": true,
-      "track": "cuda"
+      "track": "cuda",
+      "prerequisites": [
+        "vector_add"
+      ],
+      "unlocks": [
+        "ncu_profile"
+      ],
+      "milestone": "gpu_reality_check_week1",
+      "score": {
+        "impact": 4,
+        "depth": 3,
+        "reproducibility": 3
+      }
     },
     {
       "id": "ncu_profile",
@@ -131,7 +189,19 @@
       },
       "reality_check": "What is the SOL (speed-of-light) percentage, and what does it tell you?",
       "bottleneck_pick": true,
-      "track": "cuda"
+      "track": "cuda",
+      "prerequisites": [
+        "nsys_profile"
+      ],
+      "unlocks": [
+        "pytorch_matmul"
+      ],
+      "milestone": "gpu_reality_check_week1",
+      "score": {
+        "impact": 4,
+        "depth": 4,
+        "reproducibility": 3
+      }
     },
     {
       "id": "pytorch_matmul",
@@ -147,7 +217,19 @@
         "kernel_design": 5
       },
       "bottleneck_pick": true,
-      "track": "cuda"
+      "track": "cuda",
+      "prerequisites": [
+        "ncu_profile"
+      ],
+      "unlocks": [
+        "week1_report"
+      ],
+      "milestone": "gpu_reality_check_week1",
+      "score": {
+        "impact": 4,
+        "depth": 3,
+        "reproducibility": 4
+      }
     },
     {
       "id": "week1_report",
@@ -163,7 +245,15 @@
         "profiling": 5,
         "llm_systems": 5
       },
-      "track": "cuda"
+      "track": "cuda",
+      "prerequisites": [],
+      "unlocks": [],
+      "milestone": "gpu_reality_check_week1",
+      "score": {
+        "impact": 3,
+        "depth": 2,
+        "reproducibility": 5
+      }
     }
   ],
   "tracks": {
@@ -182,6 +272,44 @@
     "distillation": {
       "title": "Distillation Track",
       "description": "Compression, teacher-student training, quantization, and evaluation."
+    }
+  },
+  "resources": [
+    {
+      "id": "thunderkittens",
+      "title": "ThunderKittens",
+      "url": "https://github.com/HazyResearch/ThunderKittens",
+      "domains": [
+        "kernels"
+      ],
+      "tags": [
+        "cuda",
+        "gpu-kernels",
+        "dsl",
+        "tensor-cores",
+        "attention",
+        "performance"
+      ],
+      "difficulty": "advanced"
+    }
+  ],
+  "milestones": {
+    "gpu_reality_check_week1": {
+      "title": "GPU Reality Check - Week 1",
+      "tasks": [
+        "cuda_installed",
+        "device_query",
+        "bandwidth_test",
+        "vector_add",
+        "nsys_profile",
+        "ncu_profile",
+        "pytorch_matmul",
+        "week1_report"
+      ],
+      "domains": [
+        "kernels",
+        "evaluation"
+      ]
     }
   }
 }

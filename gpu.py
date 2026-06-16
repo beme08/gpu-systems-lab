@@ -46,7 +46,6 @@ STORAGE_PATH = ROOT / "storage.json"
 app = typer.Typer(
     add_completion=False,
     help="gpu-systems-lab - walk through a GPU systems roadmap.",
-    no_args_is_help=True,
 )
 console = Console()
 
@@ -185,6 +184,26 @@ def render_task_body(task: Dict[str, Any]) -> Text:
         text.append("\nSkill deltas:\n", style="bold")
         for k, v in skill_deltas.items():
             text.append(f"  {k} +{v}\n")
+
+    prereqs = task.get("prerequisites") or []
+    if prereqs:
+        text.append("\nPrerequisites: ", style="bold")
+        text.append(", ".join(prereqs) + "\n")
+
+    score = task.get("score")
+    if isinstance(score, dict):
+        try:
+            i = int(score["impact"])
+            d_ = int(score["depth"])
+            r = int(score["reproducibility"])
+            product = i * d_ * r
+        except (KeyError, TypeError, ValueError):
+            i = d_ = product = None
+            r = None
+        if i is not None:
+            text.append("\nScore: ", style="bold")
+            text.append(f"{i} x {d_} x {r} = {product}\n")
+
     return text
 
 
@@ -477,4 +496,7 @@ def tasks(
 
 
 if __name__ == "__main__":
+    # Alias: `gpu` with no subcommand behaves like `gpu start`.
+    if len(sys.argv) == 1:
+        sys.argv.append("start")
     app()
