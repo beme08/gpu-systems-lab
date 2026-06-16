@@ -387,8 +387,8 @@ def start(
         console.print("[green]All tasks complete.[/green]")
 
 
-@app.command()
-def next(
+@app.command(name="next")
+def cmd_next(
 ):
     """Show the next pending task."""
     roadmap = load_roadmap()
@@ -682,10 +682,7 @@ def resources(
 
     # --open is a side-effecting action; do it before filtering and exit.
     if open_id is not None:
-        # NOTE: avoid the builtin `next`; `gpu next` is a Typer command in
-        # this same module and shadows it as a local name. Use indexing.
-        matches = [r for r in items if r.get("id") == open_id]
-        match = matches[0] if matches else None
+        match = next((r for r in items if r.get("id") == open_id), None)
         if match is None:
             console.print(f"[red]Unknown resource id: {open_id}[/red]")
             raise typer.Exit(1)
