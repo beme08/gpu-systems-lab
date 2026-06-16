@@ -495,8 +495,12 @@ def tasks(
         console.print(f"  {mark} {i:>2}. {t['id']:<18}  {t['title']}")
 
 
+# Alias: `gpu` with no subcommand behaves like `gpu start`. Applied at
+# import time so it works whether the CLI is invoked as `python3 gpu.py`
+# or via the installed `gpu` console script (which calls app() directly,
+# bypassing the __main__ guard).
+if len(sys.argv) == 1:
+    sys.argv.append("start")
+
 if __name__ == "__main__":
-    # Alias: `gpu` with no subcommand behaves like `gpu start`.
-    if len(sys.argv) == 1:
-        sys.argv.append("start")
     app()
