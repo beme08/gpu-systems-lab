@@ -1,0 +1,161 @@
+{
+  "program": "GPU Reality Check",
+  "goal": "Make GPU behavior visible using CUDA, Nsight, and PyTorch benchmarks.",
+  "skills": [
+    {
+      "id": "cuda_execution_model",
+      "name": "CUDA Execution Model"
+    },
+    {
+      "id": "profiling",
+      "name": "Profiling"
+    },
+    {
+      "id": "memory_hierarchy",
+      "name": "Memory Hierarchy"
+    },
+    {
+      "id": "kernel_design",
+      "name": "Kernel Design"
+    },
+    {
+      "id": "pytorch_internals",
+      "name": "PyTorch Internals"
+    },
+    {
+      "id": "llm_systems",
+      "name": "LLM Systems"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "cuda_installed",
+      "title": "Verify CUDA environment",
+      "mode": "GPU System Lab",
+      "objective": "Confirm that NVIDIA driver, CUDA compiler, and PyTorch CUDA are working.",
+      "commands": [
+        "nvidia-smi",
+        "nvcc --version",
+        "python -c \"import torch; print(torch.cuda.is_available()); print(torch.cuda.get_device_name(0))\""
+      ],
+      "deliverable": "Create hardware.md with GPU, driver, CUDA, PyTorch, CPU, RAM, and OS.",
+      "skills": {
+        "cuda_execution_model": 5,
+        "pytorch_internals": 5
+      }
+    },
+    {
+      "id": "device_query",
+      "title": "Run CUDA deviceQuery",
+      "mode": "GPU System Lab",
+      "objective": "Inspect GPU hardware limits.",
+      "commands": [
+        "git clone https://github.com/NVIDIA/cuda-samples.git",
+        "cd cuda-samples/Samples/1_Utilities/deviceQuery && make && ./deviceQuery"
+      ],
+      "deliverable": "Record compute capability, SM count, warp size, max threads per block, and global memory.",
+      "skills": {
+        "cuda_execution_model": 10,
+        "memory_hierarchy": 5
+      }
+    },
+    {
+      "id": "bandwidth_test",
+      "title": "Run CUDA bandwidthTest",
+      "mode": "GPU System Lab",
+      "objective": "Measure practical host-device and device memory bandwidth.",
+      "commands": [
+        "cd cuda-samples/Samples/1_Utilities/bandwidthTest && make && ./bandwidthTest"
+      ],
+      "deliverable": "Record measured memory bandwidth and compare it to theoretical GPU bandwidth if available.",
+      "skills": {
+        "memory_hierarchy": 10,
+        "profiling": 5
+      },
+      "bottleneck_pick": true
+    },
+    {
+      "id": "vector_add",
+      "title": "Write first CUDA vector add kernel",
+      "mode": "CUDA Kernel Lab",
+      "constraint": "Memory Bandwidth Bottleneck",
+      "objective": "Implement C[i] = A[i] + B[i] and test different vector sizes/block sizes.",
+      "commands": [
+        "mkdir -p labs/vector_add",
+        "touch labs/vector_add/vector_add.cu",
+        "nvcc labs/vector_add/vector_add.cu -o labs/vector_add/vector_add"
+      ],
+      "deliverable": "Working kernel in labs/vector_add/vector_add.cu and a short note on achieved bandwidth.",
+      "skills": {
+        "kernel_design": 10,
+        "memory_hierarchy": 5,
+        "cuda_execution_model": 5
+      },
+      "reality_check": "Why is vector add usually memory-bound? Answer in 2 sentences.",
+      "bottleneck_hint": "memory_bound"
+    },
+    {
+      "id": "nsys_profile",
+      "title": "Profile with Nsight Systems",
+      "mode": "Profiling Lab",
+      "objective": "Capture a timeline of the vector add kernel and identify gaps.",
+      "commands": [
+        "nsys profile --stats=true -o labs/vector_add/vadd_profile ./labs/vector_add/vector_add",
+        "nsys stats labs/vector_add/vadd_profile.nsys-rep"
+      ],
+      "deliverable": "Save the .nsys-rep and note kernel time vs total time.",
+      "skills": {
+        "profiling": 15,
+        "cuda_execution_model": 5
+      },
+      "bottleneck_pick": true
+    },
+    {
+      "id": "ncu_profile",
+      "title": "Profile with Nsight Compute",
+      "mode": "Profiling Lab",
+      "objective": "Get per-kernel metrics: SM occupancy, memory throughput, achieved bandwidth.",
+      "commands": [
+        "ncu --set full ./labs/vector_add/vector_add"
+      ],
+      "deliverable": "Save ncu report and note achieved memory bandwidth vs roofline.",
+      "skills": {
+        "profiling": 15,
+        "memory_hierarchy": 5,
+        "kernel_design": 5
+      },
+      "reality_check": "What is the SOL (speed-of-light) percentage, and what does it tell you?",
+      "bottleneck_pick": true
+    },
+    {
+      "id": "pytorch_matmul",
+      "title": "Run PyTorch matmul benchmark",
+      "mode": "PyTorch Lab",
+      "objective": "Benchmark matmul at multiple sizes and dtypes; see where TFLOPS plateau.",
+      "commands": [
+        "python labs/pytorch/matmul_benchmark.py"
+      ],
+      "deliverable": "Note TFLOPS at 1024, 4096, 8192 and the dtype that wins.",
+      "skills": {
+        "pytorch_internals": 15,
+        "kernel_design": 5
+      },
+      "bottleneck_pick": true
+    },
+    {
+      "id": "week1_report",
+      "title": "Write Week 1 report",
+      "mode": "Synthesis",
+      "objective": "Synthesize all observations into gpu-week1-report.md.",
+      "commands": [
+        "touch reports/gpu-week1-report.md"
+      ],
+      "deliverable": "Complete gpu-week1-report.md with: hardware, key observations, bottlenecks found, and next steps.",
+      "skills": {
+        "pytorch_internals": 5,
+        "profiling": 5,
+        "llm_systems": 5
+      }
+    }
+  ]
+}

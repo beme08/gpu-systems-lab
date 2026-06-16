@@ -1,0 +1,21 @@
+[project]
+name = "ai-systems-trainer"
+version = "0.1.0"
+description = "Local terminal trainer for AI systems engineering (CUDA, Nsight, PyTorch, profiling, kernels)."
+readme = "README.md"
+requires-python = ">=3.9"
+license = {text = "MIT"}
+dependencies = [
+    "typer>=0.12",
+    "rich>=13.0",
+]
+
+[project.scripts]
+gpu = "train:app"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+py-modules = ["train"]

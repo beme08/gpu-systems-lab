@@ -1,0 +1,26 @@
+# GPU Week 1 Report
+
+> Synthesize: hardware, key observations, bottlenecks found, and next steps.
+
+## 1. Hardware
+
+(See `notes/hardware.md`.)
+
+## 2. Key Observations
+
+- CUDA install: ...
+- deviceQuery: compute capability ..., SM count ..., max threads/block ...
+- bandwidthTest: measured HBM bandwidth ... vs theoretical ...
+- vector add kernel: achieved ... GB/s, peak ...
+- nsys timeline: kernel time ... vs total ...
+- ncu metrics: SOL ...%, achieved memory throughput ...
+- PyTorch matmul: TFLOPS plateau begins at size ...
+
+## 3. Bottlenecks Found
+
+| Task | Bottleneck | Why |
+|------|------------|-----|
+
+## 4. Next Steps
+
+- ...
