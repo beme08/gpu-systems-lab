@@ -80,16 +80,23 @@ def load_roadmap() -> Dict[str, Any]:
     try:
         return json.loads(ROADMAP_PATH.read_text())
     except PermissionError as e:
-        # EPERM/EACCES here is almost always macOS Gatekeeper / TCC blocking
-        # first-read access, not a unix file-mode problem.
+        # EPERM here is the macOS "com.apple.provenance" sandbox xattr
+        # returning a synthetic permission error on certain reads. The file
+        # itself is fine; it just has a 3-byte sentinel xattr that some
+        # process contexts reject. Re-create the file from outside any
+        # sandboxed app (e.g. your normal terminal) to clear the xattr.
         home_hint = '$HOME/Documents/gpu/roadmap.json'
+        repo_dir = '$HOME/Documents/gpu'
         console.print(
             f"[red]PermissionError reading {ROADMAP_PATH} ({e}).[/red]\n"
-            "[yellow]Usually macOS Gatekeeper / TCC blocking first-read access.\n"
-            f"Try:  xattr -d com.apple.provenance '{home_hint}'\n"
-            f"Or:   chmod u+r '{home_hint}'"
+            "[yellow]macOS com.apple.provenance xattr is blocking this read.\n"
+            "The file content is fine; the xattr was added by a sandboxed app.\n"
+            f"Fix:  cp '{home_hint}' /tmp/roadmap.json && mv /tmp/roadmap.json '{home_hint}'\n"
+            "Or:   re-create it from git in your own terminal:\n"
+            f"        git -C '{repo_dir}' show HEAD:roadmap.json > '{home_hint}'"
         )
         raise typer.Exit(1)
+
 
 
 
