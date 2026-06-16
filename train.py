@@ -188,6 +188,32 @@ def render_task_body(task: Dict[str, Any]) -> Text:
     return text
 
 
+def render_tracks(roadmap: Dict[str, Any], completed: List[str]) -> None:
+    """Show per-track progress bars.
+
+    Iterates ``roadmap['tracks']`` in declared order. For each track, counts
+    tasks whose ``track`` field matches and how many of those are in
+    ``completed``. Tasks with no ``track`` field are bucketed under a
+    synthetic ``untracked`` group that is *not* shown.
+    """
+    tracks_meta = roadmap.get("tracks") or {}
+    tasks = roadmap.get("tasks") or []
+    if not tracks_meta:
+        return
+
+    name_w = max((len(meta.get("title", tid)) for tid, meta in tracks_meta.items()), default=10)
+    console.print(Panel("Tracks", border_style="cyan"))
+    for tid, meta in tracks_meta.items():
+        title = meta.get("title", tid)
+        track_tasks = [t for t in tasks if t.get("track") == tid]
+        total = len(track_tasks)
+        done = sum(1 for t in track_tasks if t["id"] in completed)
+        pct = (done / total * 100) if total else 0
+        filled = int(round(pct / 100 * 10))
+        bar = "█" * filled + "░" * (10 - filled)
+        console.print(f"  {title:<{name_w}} {bar} {done}/{total}  {pct:5.1f}%")
+
+
 def render_skill_tree(skills_meta: List[Dict[str, str]], skill_vals: Dict[str, int]) -> None:
     console.print(Panel("AI Systems Engineer Skill Tree", border_style="magenta"))
     for s in skills_meta:
@@ -301,6 +327,7 @@ def status(
         render_task(task)
     else:
         console.print("[green]All tasks complete.[/green]")
+    render_tracks(roadmap, data["completed"])
     render_skill_tree(roadmap.get("skills", []), data.get("skills", {}))
 
 

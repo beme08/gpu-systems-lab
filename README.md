@@ -85,7 +85,18 @@ This project was built bottom-up so you can ship each version on its own:
 | v0.2 | Skill tree (6 skills, weighted by task) | done |
 | v0.3 | Bottleneck engine (prompt on `done`) | done |
 | v0.4 | Reality checks (stored, on-demand `check`) | done |
-| v0.5 | Open-source polish (LICENSE, pyproject, swap roadmaps) | next |
+| v0.5 | Track-aware schema (cuda / llm / systems / distillation) | done |
+| v0.6 | Open-source polish (LICENSE, pyproject, swap roadmaps) | next |
+
+## Tracks
+
+Tracks are declared in `roadmap.json` under the `tracks` key and shown
+in `gpu status` as a per-track progress panel between the current task
+and the skill tree. Only the CUDA track has real tasks today; the other
+three (`llm`, `systems`, `distillation`) are placeholders so the schema
+can grow without a rewrite. To add tasks to another track, just add a
+task with `"track": "llm"` (etc.) to the `tasks` array — it will appear
+in that track's bar automatically.
 
 ## Swapping Roadmaps
 

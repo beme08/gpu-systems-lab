@@ -42,7 +42,8 @@
       "skills": {
         "cuda_execution_model": 5,
         "pytorch_internals": 5
-      }
+      },
+      "track": "cuda"
     },
     {
       "id": "device_query",
@@ -57,7 +58,8 @@
       "skills": {
         "cuda_execution_model": 10,
         "memory_hierarchy": 5
-      }
+      },
+      "track": "cuda"
     },
     {
       "id": "bandwidth_test",
@@ -72,7 +74,8 @@
         "memory_hierarchy": 10,
         "profiling": 5
       },
-      "bottleneck_pick": true
+      "bottleneck_pick": true,
+      "track": "cuda"
     },
     {
       "id": "vector_add",
@@ -92,7 +95,8 @@
         "cuda_execution_model": 5
       },
       "reality_check": "Why is vector add usually memory-bound? Answer in 2 sentences.",
-      "bottleneck_hint": "memory_bound"
+      "bottleneck_hint": "memory_bound",
+      "track": "cuda"
     },
     {
       "id": "nsys_profile",
@@ -108,7 +112,8 @@
         "profiling": 15,
         "cuda_execution_model": 5
       },
-      "bottleneck_pick": true
+      "bottleneck_pick": true,
+      "track": "cuda"
     },
     {
       "id": "ncu_profile",
@@ -125,7 +130,8 @@
         "kernel_design": 5
       },
       "reality_check": "What is the SOL (speed-of-light) percentage, and what does it tell you?",
-      "bottleneck_pick": true
+      "bottleneck_pick": true,
+      "track": "cuda"
     },
     {
       "id": "pytorch_matmul",
@@ -140,7 +146,8 @@
         "pytorch_internals": 15,
         "kernel_design": 5
       },
-      "bottleneck_pick": true
+      "bottleneck_pick": true,
+      "track": "cuda"
     },
     {
       "id": "week1_report",
@@ -155,7 +162,26 @@
         "pytorch_internals": 5,
         "profiling": 5,
         "llm_systems": 5
-      }
+      },
+      "track": "cuda"
     }
-  ]
+  ],
+  "tracks": {
+    "cuda": {
+      "title": "CUDA Track",
+      "description": "Kernels, profiling, memory hierarchy, and GPU execution."
+    },
+    "llm": {
+      "title": "LLM Track",
+      "description": "Scaling laws, training dynamics, inference, and evaluation."
+    },
+    "systems": {
+      "title": "Systems Track",
+      "description": "Inference pipelines, VAD, streaming, serving, and reliability."
+    },
+    "distillation": {
+      "title": "Distillation Track",
+      "description": "Compression, teacher-student training, quantization, and evaluation."
+    }
+  }
 }
