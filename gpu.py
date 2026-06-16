@@ -26,6 +26,8 @@ from __future__ import annotations
 import json
 import os
 import sys
+import webbrowser
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -70,6 +72,7 @@ def default_storage(roadmap: Dict[str, Any]) -> Dict[str, Any]:
         "skills": {s["id"]: 0 for s in roadmap.get("skills", [])},
         "bottlenecks": {},   # task_id -> bottleneck id
         "reality": {},       # task_id -> user's written answer
+        "benchmarks": {},    # task_id -> {path, summary, recorded_at}
     }
 
 
@@ -111,7 +114,7 @@ def load_storage() -> Dict[str, Any]:
     # backfill any new skill keys
     for sid in {s["id"] for s in roadmap.get("skills", [])}:
         data.setdefault("skills", {}).setdefault(sid, 0)
-    for key in ("completed", "bottlenecks", "reality"):
+    for key in ("completed", "bottlenecks", "reality", "benchmarks"):
         data.setdefault(key, {} if key != "completed" else [])
     return data
 
@@ -140,6 +143,54 @@ def next_task(tasks: List[Dict[str, Any]], completed: List[str]) -> Optional[Dic
 
 def all_task_ids(roadmap: Dict[str, Any]) -> List[str]:
     return [t["id"] for t in roadmap["tasks"]]
+
+
+# ----------------------------------------------------------------------------
+# Benchmark path expansion (Q4 - light validation)
+# ----------------------------------------------------------------------------
+
+def expand_bench_path(raw: str, repo_root: Path) -> str:
+    """Expand a user-supplied benchmark path.
+
+    Rules (light validation only - never raise):
+      1. A leading ``~`` is expanded to ``$HOME``.
+      2. Relative paths are resolved against ``repo_root`` (the directory
+         containing ``roadmap.json`` / ``storage.json``).
+      3. The post-tilde string is *not* checked for existence here; the
+         caller decides what to do with it.
+
+    The returned string is what gets stored in ``storage.benchmarks`` so the
+    user sees the path they typed.
+    """
+    expanded = os.path.expanduser(raw)
+    p = Path(expanded)
+    if not p.is_absolute():
+        p = (repo_root / p).resolve()
+    return str(p)
+
+
+# ----------------------------------------------------------------------------
+# Score helpers
+# ----------------------------------------------------------------------------
+
+def _task_raw_score(task: Dict[str, Any]) -> int:
+    """Return a task's raw score (impact * depth * reproducibility), or 0."""
+    s = task.get("score")
+    if not isinstance(s, dict):
+        return 0
+    try:
+        return int(s["impact"]) * int(s["depth"]) * int(s["reproducibility"])
+    except (KeyError, TypeError, ValueError):
+        return 0
+
+
+def _track_score(track_tasks: List[Dict[str, Any]], completed: List[str]) -> int:
+    """Return a 0-100 integer score for a slice of tasks."""
+    earned = sum(_task_raw_score(t) for t in track_tasks if t["id"] in completed)
+    possible = sum(_task_raw_score(t) for t in track_tasks)
+    if possible == 0:
+        return 0
+    return int(round(earned * 100 / possible))
 
 
 # ----------------------------------------------------------------------------
@@ -380,7 +431,13 @@ def skills(
 
 
 @app.command()
-def done(task_id: str = typer.Argument(..., help="Task id to mark complete")
+def done(
+    task_id: str = typer.Argument(..., help="Task id to mark complete"),
+    bench: Optional[str] = typer.Option(
+        None,
+        "--bench",
+        help="Path to a benchmark artifact for this task (e.g. notes/hardware.md).",
+    ),
 ):
     """Mark a task complete (may prompt for bottleneck / reality check)."""
     roadmap = load_roadmap()
@@ -419,6 +476,34 @@ def done(task_id: str = typer.Argument(..., help="Task id to mark complete")
         current = data["skills"].get(skill, 0)
         data["skills"][skill] = max(0, min(100, current + points))
 
+    # Benchmark capture (v0.8). Light path validation only: expand ~,
+    # resolve relative paths against the repo root, warn to stderr if the
+    # resolved path does not exist, but never block. Never copy / hash / read
+    # the file. (See expand_bench_path docstring.)
+    if bench:
+        resolved = expand_bench_path(bench, ROOT)
+        if not os.path.exists(resolved):
+            typer.echo(
+                f"warning: benchmark file not found: {resolved} - recording anyway",
+                err=True,
+            )
+        try:
+            summary = typer.prompt("One-line benchmark summary", default="")
+        except (typer.Abort, EOFError, KeyboardInterrupt):
+            summary = ""
+        data["benchmarks"][task_id] = {
+            "path": resolved,
+            "summary": summary.strip(),
+            "recorded_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        }
+    elif task.get("bottleneck_pick") or task.get("commands"):
+        # Hint only - never blocks, never records.
+        typer.echo(
+            "Tip: attach a benchmark file with --bench <path> (e.g. "
+            "`gpu done " + task_id + " --bench notes/hardware.md`).",
+            err=True,
+        )
+
     save_storage(data)
     console.print(f"[green]Completed:[/green] {task['title']}")
 
@@ -450,21 +535,43 @@ def reset(
 
 @app.command()
 def explain(
+    task_id: Optional[str] = typer.Option(
+        None,
+        "--id",
+        help="Show bottleneck + reality + benchmark for a single task.",
+    ),
 ):
-    """Show bottleneck answers and reality check answers recorded so far."""
+    """Show bottleneck / reality / benchmark answers recorded so far.
+
+    With no arguments, prints global logs (bottlenecks, reality checks,
+    benchmarks). With ``--id <task_id>``, prints a focused 3-block view
+    for that task: BENCHMARK is only shown when a record exists (Q5 -
+    absent benchmarks are quiet).
+    """
     data = load_storage()
-    has_any = data.get("bottlenecks") or data.get("reality")
-    if not has_any:
-        console.print("[yellow]No bottleneck / reality answers recorded yet.[/yellow]")
+
+    # Per-task view
+    if task_id:
+        _render_explain_task(task_id, data)
         return
 
-    table = Table(title="Bottleneck Log")
-    table.add_column("Task", style="cyan")
-    table.add_column("Bottleneck", style="yellow")
-    for tid, bid in data.get("bottlenecks", {}).items():
-        table.add_row(tid, bid)
+    # Global view
+    has_any = (
+        data.get("bottlenecks")
+        or data.get("reality")
+        or data.get("benchmarks")
+    )
+    if not has_any:
+        console.print("[yellow]No bottleneck / reality / benchmark records yet.[/yellow]")
+        return
+
     if data.get("bottlenecks"):
-        console.print(table)
+        bt = Table(title="Bottleneck Log")
+        bt.add_column("Task", style="cyan")
+        bt.add_column("Bottleneck", style="yellow")
+        for tid, bid in data["bottlenecks"].items():
+            bt.add_row(tid, bid)
+        console.print(bt)
 
     if data.get("reality"):
         rt = Table(title="Reality Check Log")
@@ -473,6 +580,45 @@ def explain(
         for tid, ans in data["reality"].items():
             rt.add_row(tid, ans)
         console.print(rt)
+
+    if data.get("benchmarks"):
+        bk = Table(title="Benchmark Log")
+        bk.add_column("Task", style="cyan")
+        bk.add_column("Path", style="green", overflow="fold")
+        bk.add_column("Summary", style="white", overflow="fold")
+        bk.add_column("Recorded", style="dim")
+        for tid, rec in data["benchmarks"].items():
+            bk.add_row(
+                tid,
+                rec.get("path", ""),
+                rec.get("summary", ""),
+                rec.get("recorded_at", ""),
+            )
+        console.print(bk)
+
+
+def _render_explain_task(task_id: str, data: Dict[str, Any]) -> None:
+    """Render the focused per-task view used by ``gpu explain --id``."""
+    bid = data.get("bottlenecks", {}).get(task_id)
+    ans = data.get("reality", {}).get(task_id)
+    rec = data.get("benchmarks", {}).get(task_id)
+
+    console.print(Panel(f"Task: [bold]{task_id}[/bold]", border_style="cyan"))
+
+    if bid:
+        console.print(Panel(f"bottleneck = {bid}", title="BOTTLENECK", border_style="yellow"))
+    if ans:
+        console.print(Panel(ans, title="REALITY", border_style="magenta"))
+    if rec:
+        body = (
+            f"path:      {rec.get('path', '')}\n"
+            f"summary:   {rec.get('summary', '')}\n"
+            f"recorded:  {rec.get('recorded_at', '')}"
+        )
+        console.print(Panel(body, title="BENCHMARK", border_style="green"))
+
+    if not (bid or ans or rec):
+        console.print("[yellow]No records for this task.[/yellow]")
 
 
 @app.command()
@@ -513,6 +659,126 @@ def tasks(
     for i, t in enumerate(roadmap["tasks"], 1):
         mark = "[green]x[/green]" if t["id"] in data["completed"] else "[ ]"
         console.print(f"  {mark} {i:>2}. {t['id']:<18}  {t['title']}")
+
+
+# ----------------------------------------------------------------------------
+# v0.8: resources + score commands
+# ----------------------------------------------------------------------------
+
+@app.command()
+def resources(
+    domain: Optional[str] = typer.Option(None, "--domain", help="Filter by domain (e.g. kernels)."),
+    tag: Optional[str] = typer.Option(None, "--tag", help="Filter by tag (e.g. cuda)."),
+    difficulty: Optional[str] = typer.Option(
+        None, "--difficulty", help="Filter by difficulty (beginner|intermediate|advanced)."
+    ),
+    open_id: Optional[str] = typer.Option(
+        None, "--open", help="Open the URL for a resource id in the default browser."
+    ),
+):
+    """List resources from the roadmap (papers, libraries, tools)."""
+    roadmap = load_roadmap()
+    items = list(roadmap.get("resources") or [])
+
+    # --open is a side-effecting action; do it before filtering and exit.
+    if open_id is not None:
+        # NOTE: avoid the builtin `next`; `gpu next` is a Typer command in
+        # this same module and shadows it as a local name. Use indexing.
+        matches = [r for r in items if r.get("id") == open_id]
+        match = matches[0] if matches else None
+        if match is None:
+            console.print(f"[red]Unknown resource id: {open_id}[/red]")
+            raise typer.Exit(1)
+        url = match.get("url", "")
+        if not url:
+            console.print(f"[red]Resource {open_id} has no url.[/red]")
+            raise typer.Exit(1)
+        console.print(f"Opening [cyan]{url}[/cyan] in your default browser...")
+        webbrowser.open(url)
+        return
+
+    if domain is not None:
+        items = [r for r in items if domain in (r.get("domains") or [])]
+    if tag is not None:
+        items = [r for r in items if tag in (r.get("tags") or [])]
+    if difficulty is not None:
+        items = [r for r in items if r.get("difficulty") == difficulty]
+
+    if not items:
+        console.print("[yellow]No resources match the current filters.[/yellow]")
+        return
+
+    table = Table(title="Resources", show_lines=False)
+    table.add_column("ID", style="cyan", no_wrap=True)
+    table.add_column("Title", style="bold")
+    table.add_column("Domains", style="green")
+    table.add_column("Tags", style="magenta")
+    table.add_column("Difficulty", style="yellow")
+    table.add_column("URL", style="blue", overflow="fold")
+    for r in items:
+        table.add_row(
+            r.get("id", ""),
+            r.get("title", ""),
+            ", ".join(r.get("domains") or []),
+            ", ".join(r.get("tags") or []),
+            r.get("difficulty", ""),
+            r.get("url", ""),
+        )
+    console.print(table)
+
+
+@app.command()
+def score(
+):
+    """Show weighted program + per-track + per-milestone scores."""
+    roadmap = load_roadmap()
+    data = load_storage()
+    completed = set(data.get("completed") or [])
+    tasks = roadmap.get("tasks") or []
+
+    # Program total
+    total = _track_score(tasks, list(completed))
+    possible = sum(_task_raw_score(t) for t in tasks)
+    earned = sum(_task_raw_score(t) for t in tasks if t["id"] in completed)
+    console.print(Panel(
+        f"[bold]{total} / 100[/bold]  (raw: {earned} / {possible})",
+        title="GPU Reality Score",
+        border_style="cyan",
+    ))
+
+    # Per-track rollup
+    tracks_meta = roadmap.get("tracks") or {}
+    track_tasks = {tid: [t for t in tasks if t.get("track") == tid] for tid in tracks_meta}
+    if tracks_meta:
+        console.print(Panel("Score by track", border_style="cyan"))
+        name_w = max((len(meta.get("title", tid)) for tid, meta in tracks_meta.items()), default=10)
+        for tid, meta in tracks_meta.items():
+            t_tasks = track_tasks.get(tid, [])
+            t_score = _track_score(t_tasks, list(completed))
+            t_done = sum(1 for t in t_tasks if t["id"] in completed)
+            filled = int(round(t_score / 100 * 10))
+            bar = "█" * filled + "░" * (10 - filled)
+            console.print(
+                f"  {meta.get('title', tid):<{name_w}} {bar} "
+                f"{t_score:3d}/100  ({t_done}/{len(t_tasks)} tasks)"
+            )
+
+    # Per-milestone rollup
+    milestones = roadmap.get("milestones") or {}
+    if milestones:
+        console.print(Panel("Score by milestone", border_style="cyan"))
+        mname_w = max((len(m.get("title", mid)) for mid, m in milestones.items()), default=10)
+        for mid, m in milestones.items():
+            ids = m.get("tasks") or []
+            m_tasks = [t for t in tasks if t["id"] in ids]
+            m_score = _track_score(m_tasks, list(completed))
+            m_done = sum(1 for t in m_tasks if t["id"] in completed)
+            filled = int(round(m_score / 100 * 10))
+            bar = "█" * filled + "░" * (10 - filled)
+            console.print(
+                f"  {m.get('title', mid):<{mname_w}} {bar} "
+                f"{m_score:3d}/100  ({m_done}/{len(m_tasks)} tasks)"
+            )
 
 
 # Alias: `gpu` with no subcommand behaves like `gpu start`. Applied at

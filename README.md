@@ -43,7 +43,9 @@ Some tasks additionally require:
 | `gpu next`     | Show the next pending task. |
 | `gpu status`   | Progress bar + current task + skill tree. |
 | `gpu skills`   | Skill tree only. |
-| `gpu done <id>`| Mark task complete (prompts for bottleneck / reality check when needed). |
+| `gpu done <id> [--bench <path>]` | Mark task complete (prompts for bottleneck / reality check when needed; attach a benchmark artifact with `--bench`). |
+| `gpu resources` | List roadmap resources (papers, libraries, tools), with `--domain`, `--tag`, `--difficulty` filters and `--open <id>`. |
+| `gpu score` | Show weighted program + per-track + per-milestone score. |
 | `gpu check`    | Run a pending reality check on demand. |
 | `gpu explain`  | Show recorded bottleneck + reality-check log. |
 | `gpu tasks`    | List all task ids with completion marks. |
@@ -90,7 +92,7 @@ This project was built bottom-up so you can ship each version on its own:
 | v0.5 | Track-aware schema (cuda / llm / systems / distillation) | done |
 | v0.6 | Open-source polish (LICENSE, pyproject, command rebrand to `gpu`) | done |
 | v0.7 | DAG-ready schema + scoring metadata + `resources` + `gpu` alias | done |
-| v0.8 | Benchmark logging + `gpu resources` command + `gpu score` panel | next |
+| v0.8 | Benchmark logging (file + summary) + `gpu resources` + `gpu score` panel | done |
 
 ## Tracks
 
@@ -105,13 +107,28 @@ in that track's bar automatically.
 ### Resources
 
 Resources (papers, libraries, tools) live in `roadmap.json` under the
-`resources` key. They are not yet exposed as a command in v0.7, but the
-data shape is in place: each entry has `id`, `title`, `url`, `domains`
-(list), `tags` (list), and `difficulty` (beginner | intermediate | advanced).
+`resources` key and are exposed in v0.8 via `gpu resources`. Each entry
+has `id`, `title`, `url`, `domains` (list), `tags` (list), and
+`difficulty` (beginner | intermediate | advanced).
 
 First resource: **ThunderKittens** (HazyResearch) — a kernels DSL for
 tensor-core attention-style workloads, advanced difficulty. Lives under
 the kernels domain.
+
+### Benchmarks
+
+Every `gpu done` can record a benchmark artifact:
+
+```bash
+gpu done <id> --bench <path>
+```
+
+The CLI expands `~` and repo-relative paths, prints a one-line summary
+prompt, and stores `{path, summary, recorded_at}` in `storage.json` under
+`benchmarks[<id>]`. The path is recorded even if the file does not
+exist (light validation; a warning goes to stderr). Run
+`gpu explain --id <id>` to see the recorded benchmark. The schema is
+`v0.8`; `load_storage` backfills the `benchmarks` key for older files.
 
 ## Swapping Roadmaps
 
