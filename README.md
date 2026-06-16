@@ -1,4 +1,6 @@
-# ai-systems-trainer (gpu)
+# gpu-systems-lab
+
+> A terminal-based training loop for learning CUDA, GPU profiling, and AI systems engineering.
 
 A local terminal program that walks you through a GPU systems roadmap:
 CUDA, Nsight, PyTorch benchmarking, bottleneck analysis, and later
@@ -37,17 +39,17 @@ Some tasks additionally require:
 
 | Command           | Purpose |
 |-------------------|---------|
-| `python train.py start`    | Begin the program, show first task. |
-| `python train.py next`     | Show the next pending task. |
-| `python train.py status`   | Progress bar + current task + skill tree. |
-| `python train.py skills`   | Skill tree only. |
-| `python train.py done <id>`| Mark task complete (prompts for bottleneck / reality check when needed). |
-| `python train.py check`    | Run a pending reality check on demand. |
-| `python train.py explain`  | Show recorded bottleneck + reality-check log. |
-| `python train.py tasks`    | List all task ids with completion marks. |
-| `python train.py reset`    | Wipe all progress (asks first). |
+| `gpu start`    | Begin the program, show first task. |
+| `gpu next`     | Show the next pending task. |
+| `gpu status`   | Progress bar + current task + skill tree. |
+| `gpu skills`   | Skill tree only. |
+| `gpu done <id>`| Mark task complete (prompts for bottleneck / reality check when needed). |
+| `gpu check`    | Run a pending reality check on demand. |
+| `gpu explain`  | Show recorded bottleneck + reality-check log. |
+| `gpu tasks`    | List all task ids with completion marks. |
+| `gpu reset`    | Wipe all progress (asks first). |
 
-State is stored in `storage.json` next to `train.py`. It is local JSON,
+State is stored in `storage.json` next to `gpu.py`. It is local JSON,
 no server, no telemetry.
 
 ## Install
@@ -63,7 +65,7 @@ to actually execute the labs.
 
 ```
 .
-├── train.py             # the CLI (single file for v0.1)
+├── gpu.py               # the CLI (single file)
 ├── roadmap.json         # tasks, skills, prompts
 ├── storage.json         # local progress (created on first run)
 ├── labs/
@@ -86,7 +88,8 @@ This project was built bottom-up so you can ship each version on its own:
 | v0.3 | Bottleneck engine (prompt on `done`) | done |
 | v0.4 | Reality checks (stored, on-demand `check`) | done |
 | v0.5 | Track-aware schema (cuda / llm / systems / distillation) | done |
-| v0.6 | Open-source polish (LICENSE, pyproject, swap roadmaps) | next |
+| v0.6 | Open-source polish (LICENSE, pyproject, command rebrand to `gpu`) | done |
+| v0.7 | Benchmark logging (auto-prompt on `done`, `gpu benchmark add/list`) | next |
 
 ## Tracks
 
@@ -109,7 +112,7 @@ cp roadmap.json roadmap.triton.json
 mv storage.json storage.gpu.json     # keep your current progress
 ```
 
-The schema lives in `train.py:load_roadmap()`. Skills must be declared
+The schema lives in `gpu.py:load_roadmap()`. Skills must be declared
 in the top-level `skills` array; the storage layer backfills new skill
 ids automatically.
 

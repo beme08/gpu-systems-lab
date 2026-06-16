@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-ai-systems-trainer / gpu: a local CLI that walks you through a GPU
-systems roadmap (CUDA, Nsight, PyTorch, profiling, kernels).
+gpu-systems-lab: a local CLI that walks you through a GPU systems
+roadmap (CUDA, Nsight, PyTorch, profiling, kernels).
 
 Design philosophy: this is not just a checklist. The goal is to simulate
 how an AI Systems Engineer thinks:
@@ -45,7 +45,7 @@ STORAGE_PATH = ROOT / "storage.json"
 
 app = typer.Typer(
     add_completion=False,
-    help="ai-systems-trainer (gpu) - walk through a GPU systems roadmap.",
+    help="gpu-systems-lab - walk through a GPU systems roadmap.",
     no_args_is_help=True,
 )
 console = Console()

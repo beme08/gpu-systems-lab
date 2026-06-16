@@ -1,7 +1,7 @@
 [project]
-name = "ai-systems-trainer"
+name = "gpu-systems-lab"
 version = "0.1.0"
-description = "Local terminal trainer for AI systems engineering (CUDA, Nsight, PyTorch, profiling, kernels)."
+description = "A terminal-based training loop for learning CUDA, GPU profiling, and AI systems engineering."
 readme = "README.md"
 requires-python = ">=3.9"
 license = {text = "MIT"}
@@ -11,11 +11,11 @@ dependencies = [
 ]
 
 [project.scripts]
-gpu = "train:app"
+gpu = "gpu:app"
 
 [build-system]
 requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
-py-modules = ["train"]
+py-modules = ["gpu"]
