@@ -427,7 +427,11 @@ def check(
         title=task["title"],
         border_style="magenta",
     ))
-    ans = typer.prompt("Your answer (or 'skip')")
+    try:
+        ans = typer.prompt("Your answer (or 'skip')")
+    except (typer.Abort, EOFError, KeyboardInterrupt):
+        console.print("[yellow]Skipped.[/yellow]")
+        raise typer.Exit(0)
     if ans.strip() and ans.strip().lower() != "skip":
         data["reality"][task["id"]] = ans.strip()
         save_storage(data)
