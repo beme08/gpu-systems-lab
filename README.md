@@ -39,7 +39,7 @@ Some tasks additionally require:
 
 | Command           | Purpose |
 |-------------------|---------|
-| `gpu start`    | Begin the program, show first task. |
+| `gpu start`    | First run: full walkthrough (welcome, what this is, shape, commands, first task). Later runs: quiet. |
 | `gpu next`     | Show the next pending task. |
 | `gpu status`   | Progress bar + current task + skill tree. |
 | `gpu skills`   | Skill tree only. |
@@ -93,6 +93,7 @@ This project was built bottom-up so you can ship each version on its own:
 | v0.6 | Open-source polish (LICENSE, pyproject, command rebrand to `gpu`) | done |
 | v0.7 | DAG-ready schema + scoring metadata + `resources` + `gpu` alias | done |
 | v0.8 | Benchmark logging (file + summary) + `gpu resources` + `gpu score` panel | done |
+| v0.9 | First-run walkthrough: welcome + design philosophy + program shape + commands + first task | done |
 
 ## Tracks
 

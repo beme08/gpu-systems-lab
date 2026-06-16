@@ -73,6 +73,7 @@ def default_storage(roadmap: Dict[str, Any]) -> Dict[str, Any]:
         "bottlenecks": {},   # task_id -> bottleneck id
         "reality": {},       # task_id -> user's written answer
         "benchmarks": {},    # task_id -> {path, summary, recorded_at}
+        "welcomed": False,   # True once gpu start has shown the first-run walkthrough
     }
 
 
@@ -116,6 +117,7 @@ def load_storage() -> Dict[str, Any]:
         data.setdefault("skills", {}).setdefault(sid, 0)
     for key in ("completed", "bottlenecks", "reality", "benchmarks"):
         data.setdefault(key, {} if key != "completed" else [])
+    data.setdefault("welcomed", False)
     return data
 
 
@@ -304,6 +306,91 @@ def render_tracks(roadmap: Dict[str, Any], completed: List[str]) -> None:
         console.print(f"  {title:<{name_w}} {bar} {done}/{total}  {pct:5.1f}%")
 
 
+def render_walkthrough(roadmap: Dict[str, Any], storage: Dict[str, Any]) -> None:
+    """First-run orientation: program, shape, commands, first task.
+
+    Designed to be shown exactly once per install. Re-running ``gpu start``
+    after the first run is intentionally quiet - the user already saw this.
+    """
+    # 1. Welcome panel
+    console.print(Panel(
+        f"[bold]{roadmap.get('program', '?')}[/bold]\n\n{roadmap.get('goal', '')}",
+        title="Welcome",
+        border_style="green",
+    ))
+
+    # 2. What this is
+    console.print(Panel(
+        "This is not a checklist. It is a small simulator for how an AI "
+        "Systems Engineer thinks:\n\n"
+        "  1. What is the workload?\n"
+        "  2. What hardware is it running on?\n"
+        "  3. What is the bottleneck?\n"
+        "  4. How do I measure it?\n"
+        "  5. What optimization should I try?\n"
+        "  6. Did the benchmark prove improvement?\n\n"
+        "Every task records progress, bumps skill bars, and (for some) "
+        "asks you to classify the bottleneck and write a short reality check.",
+        title="What this is",
+        border_style="cyan",
+    ))
+
+    # 3. Shape of the program
+    tracks_meta = roadmap.get("tracks") or {}
+    milestones = roadmap.get("milestones") or {}
+    tasks = roadmap.get("tasks") or []
+    total_tasks = len(tasks)
+    track_lines = []
+    for tid, meta in tracks_meta.items():
+        title = meta.get("title", tid)
+        n = sum(1 for t in tasks if t.get("track") == tid)
+        track_lines.append(f"  {title:<22} {n} task(s)")
+    milestone_lines = [
+        f"  {m.get('title', mid):<30} {len(m.get('tasks') or [])} task(s)"
+        for mid, m in milestones.items()
+    ]
+    shape_body = (
+        f"[bold]Tasks:[/bold]  {total_tasks} total across {len(tracks_meta)} tracks\n\n"
+        f"[bold]Tracks:[/bold]\n" + "\n".join(track_lines) + "\n\n"
+        f"[bold]Milestones:[/bold]\n" + "\n".join(milestone_lines)
+    )
+    console.print(Panel(shape_body, title="Shape of the program", border_style="magenta"))
+
+    # 4. Commands you will use
+    cmds = Table(show_header=False, box=None, padding=(0, 2))
+    cmds.add_column(style="cyan", no_wrap=True)
+    cmds.add_column(style="white")
+    cmds.add_row("gpu start",   "begin the program, show the first task (this view)")
+    cmds.add_row("gpu next",    "show the next pending task")
+    cmds.add_row("gpu status",  "progress bar, current task, tracks, skill tree")
+    cmds.add_row("gpu skills",  "skill tree only")
+    cmds.add_row("gpu done <id> [--bench <path>]", "mark a task complete (prompts for bottleneck / reality when needed; --bench attaches a benchmark artifact)")
+    cmds.add_row("gpu check",   "run a pending reality check on demand")
+    cmds.add_row("gpu explain", "show recorded bottleneck + reality-check + benchmark log")
+    cmds.add_row("gpu explain --id <id>", "focused per-task view")
+    cmds.add_row("gpu tasks",   "list all task ids with completion marks")
+    cmds.add_row("gpu resources", "list papers / libraries / tools (filter --domain / --tag / --difficulty, --open <id>)")
+    cmds.add_row("gpu score",   "weighted program + per-track + per-milestone score")
+    cmds.add_row("gpu reset",   "wipe all progress (asks first)")
+    console.print(Panel(cmds, title="Commands you will use", border_style="blue"))
+
+    # 5. First task
+    first = next_task(tasks, storage.get("completed") or [])
+    if first is not None:
+        console.print(Panel(
+            "Your first task is below. The 'Commands' lines are what you "
+            "actually run in your terminal; the 'Deliverable' is what you "
+            "produce. When you are done, run\n\n"
+            "  [bold]gpu done " + first["id"] + "[/bold]\n\n"
+            "(add [bold]--bench <path>[/bold] to attach a benchmark artifact).",
+            title="Your first task",
+            border_style="yellow",
+        ))
+        render_task(first, is_current=True)
+    else:
+        console.print("[green]All tasks complete. Run `gpu score` to see the result.[/green]")
+
+
 def render_skill_tree(skills_meta: List[Dict[str, str]], skill_vals: Dict[str, int]) -> None:
     console.print(Panel("AI Systems Engineer Skill Tree", border_style="magenta"))
     for s in skills_meta:
@@ -365,26 +452,42 @@ def prompt_reality(task: Dict[str, Any]) -> str:
 @app.command()
 def start(
 ):
-    """Start the program and show the first task."""
+    """Begin the program and walk you through what is next.
+
+    First run: shows the full walkthrough (welcome, what this is, shape of
+    the program, command list, first task). Subsequent runs: stay quiet
+    and just show the current task - use `gpu next` for that.
+    """
     roadmap = load_roadmap()
     data = load_storage()
+
     if not data["started"]:
         data["started"] = True
+        render_walkthrough(roadmap, data)
+        data["welcomed"] = True
         save_storage(data)
-        console.print(Panel(
-            f"[bold]{roadmap['program']}[/bold]\n\n{roadmap['goal']}",
-            title="Welcome",
-            border_style="green",
-        ))
-    else:
-        console.print("[yellow]Program already started. Showing current state.[/yellow]")
+        return
 
+    # Already started.
+    if not data.get("welcomed"):
+        # started was set in an earlier version of the tool (no welcomed
+        # key was ever written). Show the walkthrough once and remember.
+        render_walkthrough(roadmap, data)
+        data["welcomed"] = True
+        save_storage(data)
+        return
+
+    # Re-runs are intentionally quiet. Just show the current task.
     render_progress(roadmap["tasks"], data["completed"])
     task = next_task(roadmap["tasks"], data["completed"])
     if task:
         render_task(task)
     else:
-        console.print("[green]All tasks complete.[/green]")
+        console.print(Panel(
+            "Phase 1 complete. Now write and review gpu-week1-report.md.",
+            title="GPU Reality Check Complete",
+            border_style="green",
+        ))
 
 
 @app.command(name="next")

@@ -1,5 +1,5 @@
 {
-  "started": true,
+  "started": false,
   "completed": [],
   "skills": {
     "cuda_execution_model": 0,
@@ -11,5 +11,6 @@
   },
   "bottlenecks": {},
   "reality": {},
-  "benchmarks": {}
+  "benchmarks": {},
+  "welcomed": false
 }
