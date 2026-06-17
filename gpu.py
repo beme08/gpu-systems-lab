@@ -277,6 +277,29 @@ def render_task_body(task: Dict[str, Any]) -> Text:
             text.append("\nScore: ", style="bold")
             text.append(f"{i} x {d_} x {r} = {product}\n")
 
+    # When-done preview (v0.10). Tells the user what `gpu done <id>` will
+    # ask before they get there, so the prompts are not a surprise.
+    if task.get("bottleneck_pick") or task.get("reality_check") or (task.get("commands") or task.get("bottleneck_pick")):
+        text.append("\nWhen done:\n", style="bold cyan")
+        if task.get("bottleneck_pick"):
+            text.append(
+                f"  gpu done {task['id']} will ask you to classify the bottleneck.\n",
+                style="cyan",
+            )
+        if task.get("reality_check"):
+            q = task["reality_check"]
+            if len(q) > 80:
+                q = q[:77].rstrip() + "..."
+            text.append(
+                f"  gpu done {task['id']} will ask: \"{q}\"\n",
+                style="magenta",
+            )
+        if task.get("commands") or task.get("bottleneck_pick"):
+            text.append(
+                f"  Tip: attach a benchmark with `gpu done {task['id']} --bench <path>`.\n",
+                style="green",
+            )
+
     return text
 
 
@@ -403,6 +426,81 @@ def render_skill_tree(skills_meta: List[Dict[str, str]], skill_vals: Dict[str, i
         console.print(f"  {name:<22} {bar} {val:3d}%")
 
 
+def _count_pending_prompts(roadmap: Dict[str, Any], data: Dict[str, Any]) -> Dict[str, int]:
+    """Count reality checks, bottlenecks, and bench opportunities still open."""
+    tasks = roadmap.get("tasks") or []
+    completed = set(data.get("completed") or [])
+    reality_pending = sum(
+        1 for t in tasks
+        if t.get("reality_check") and t["id"] not in (data.get("reality") or {})
+    )
+    bottleneck_pending = sum(
+        1 for t in tasks
+        if t.get("bottleneck_pick") and t["id"] not in (data.get("bottlenecks") or {})
+    )
+    bench_attachable = sum(
+        1 for t in tasks
+        if (t.get("commands") or t.get("bottleneck_pick"))
+        and t["id"] in completed
+        and t["id"] not in (data.get("benchmarks") or {})
+    )
+    return {
+        "reality": reality_pending,
+        "bottleneck": bottleneck_pending,
+        "bench": bench_attachable,
+    }
+
+
+def _render_pending(roadmap: Dict[str, Any], data: Dict[str, Any]) -> None:
+    """Append a small 'Pending' footer to status. v0.10."""
+    counts = _count_pending_prompts(roadmap, data)
+    body = (
+        f"Reality checks to answer:           {counts['reality']}\n"
+        f"Bottleneck classifications pending: {counts['bottleneck']}\n"
+        f"Benchmarks to attach:               {counts['bench']}"
+    )
+    console.print(Panel(body, title="Pending", border_style="yellow"))
+
+
+def _next_hint(roadmap: Dict[str, Any], data: Dict[str, Any]) -> str:
+    """Compute a single next-action line. v0.10.
+
+    Priority (highest first):
+      1. Pending reality check via `gpu check`
+      2. Pending bottleneck classification on the next task
+      3. Bench artifact unviewed (recorded but not seen)
+      4. Next pending task via `gpu done <id>`
+      5. All done -> `gpu score`
+    """
+    tasks = roadmap.get("tasks") or []
+    completed = set(data.get("completed") or [])
+
+    # 1. Pending reality checks (any task with reality_check not yet answered)
+    for t in tasks:
+        if t.get("reality_check") and t["id"] not in (data.get("reality") or {}):
+            return f"`gpu check` (a reality check is pending for {t['id']})"
+
+    # 2. Next task that needs a bottleneck classification
+    for t in tasks:
+        if t["id"] in completed:
+            continue
+        if t.get("bottleneck_pick") and t["id"] not in (data.get("bottlenecks") or {}):
+            return f"`gpu done {t['id']}` (will ask for a bottleneck classification)"
+
+    # 3. Bench artifact recorded but never viewed
+    for t in tasks:
+        if t["id"] in (data.get("benchmarks") or {}):
+            return f"`gpu explain --id {t['id']}` (you have a recorded benchmark to review)"
+
+    # 4. Next pending task
+    for t in tasks:
+        if t["id"] not in completed:
+            return f"`gpu done {t['id']}`"
+
+    # 5. All done
+    return "`gpu score` to see the final result"
+
+
 # ----------------------------------------------------------------------------
 # Bottleneck prompt
 # ----------------------------------------------------------------------------
@@ -511,7 +609,7 @@ def cmd_next(
 @app.command()
 def status(
 ):
-    """Show progress, current task, and skill tree."""
+    """Show progress, current task, skill tree, and what's pending."""
     roadmap = load_roadmap()
     data = load_storage()
     render_progress(roadmap["tasks"], data["completed"])
@@ -522,6 +620,8 @@ def status(
         console.print("[green]All tasks complete.[/green]")
     render_tracks(roadmap, data["completed"])
     render_skill_tree(roadmap.get("skills", []), data.get("skills", {}))
+    _render_pending(roadmap, data)
+    console.print(f"[bold cyan]Next:[/bold cyan] {_next_hint(roadmap, data)}")
 
 
 @app.command()
@@ -552,11 +652,33 @@ def done(
         console.print("Valid ids:")
         for t in roadmap["tasks"]:
             console.print(f"  - {t['id']}")
+        typer.echo(
+            "Tip: run `gpu tasks` for a numbered view, or `gpu status` for the current task.",
+            err=True,
+        )
         raise typer.Exit(1)
 
     if task_id in data["completed"]:
         console.print(f"[yellow]Task {task_id} is already complete.[/yellow]")
         return
+
+    # Re-run detection (v0.10). The user is starting `gpu done` for a task
+    # they have not completed yet, but already have a recorded prompt for
+    # (likely from `gpu check` or a previous interrupted session). Surface
+    # the data-state so the prompts are not a surprise.
+    if task.get("reality_check") and task_id in data.get("reality", {}):
+        typer.echo(
+            f"Tip: a reality check for {task_id} is already recorded; "
+            f"`gpu explain --id {task_id}` to view it.",
+            err=True,
+        )
+    if task.get("bottleneck_pick") and task_id in data.get("bottlenecks", {}):
+        typer.echo(
+            f"Tip: a bottleneck for {task_id} is already recorded as "
+            f"{data['bottlenecks'][task_id]}; "
+            f"`gpu explain --id {task_id}` to view it.",
+            err=True,
+        )
 
     # Bottleneck engine
     if task.get("bottleneck_pick"):

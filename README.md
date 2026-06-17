@@ -41,7 +41,7 @@ Some tasks additionally require:
 |-------------------|---------|
 | `gpu start`    | First run: full walkthrough (welcome, what this is, shape, commands, first task). Later runs: quiet. |
 | `gpu next`     | Show the next pending task. |
-| `gpu status`   | Progress bar + current task + skill tree. |
+| `gpu status`   | Progress bar + current task + tracks + skill tree + a Pending panel (open reality checks, bottleneck classifications, benchmark opportunities) + a single Next-hint line. |
 | `gpu skills`   | Skill tree only. |
 | `gpu done <id> [--bench <path>]` | Mark task complete (prompts for bottleneck / reality check when needed; attach a benchmark artifact with `--bench`). |
 | `gpu resources` | List roadmap resources (papers, libraries, tools), with `--domain`, `--tag`, `--difficulty` filters and `--open <id>`. |
