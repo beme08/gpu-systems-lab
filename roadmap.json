@@ -282,7 +282,11 @@
         "impact": 2,
         "depth": 2,
         "reproducibility": 4
-      }
+      },
+      "compute_paths": [
+        "runpod",
+        "lambda_labs"
+      ]
     },
     {
       "id": "triton_vector_add",
@@ -311,7 +315,11 @@
         "impact": 3,
         "depth": 3,
         "reproducibility": 4
-      }
+      },
+      "compute_paths": [
+        "runpod",
+        "lambda_labs"
+      ]
     },
     {
       "id": "triton_matmul",
@@ -340,7 +348,11 @@
         "impact": 4,
         "depth": 4,
         "reproducibility": 3
-      }
+      },
+      "compute_paths": [
+        "runpod",
+        "lambda_labs"
+      ]
     },
     {
       "id": "triton_fused_softmax",
@@ -368,7 +380,11 @@
         "impact": 4,
         "depth": 3,
         "reproducibility": 3
-      }
+      },
+      "compute_paths": [
+        "runpod",
+        "lambda_labs"
+      ]
     },
     {
       "id": "triton_attention_draft",
@@ -399,7 +415,11 @@
         "impact": 4,
         "depth": 4,
         "reproducibility": 2
-      }
+      },
+      "compute_paths": [
+        "runpod",
+        "lambda_labs"
+      ]
     },
     {
       "id": "triton_kernel_report",
@@ -427,7 +447,11 @@
         "impact": 3,
         "depth": 3,
         "reproducibility": 5
-      }
+      },
+      "compute_paths": [
+        "runpod",
+        "lambda_labs"
+      ]
     },
     {
       "id": "llm_env_setup",
@@ -456,7 +480,12 @@
         "impact": 2,
         "depth": 2,
         "reproducibility": 4
-      }
+      },
+      "compute_paths": [
+        "google_colab",
+        "kaggle_notebooks",
+        "runpod"
+      ]
     },
     {
       "id": "llm_first_generation",
@@ -487,7 +516,12 @@
         "impact": 3,
         "depth": 3,
         "reproducibility": 4
-      }
+      },
+      "compute_paths": [
+        "google_colab",
+        "kaggle_notebooks",
+        "runpod"
+      ]
     },
     {
       "id": "llm_kv_cache_profiled",
@@ -518,7 +552,11 @@
         "impact": 4,
         "depth": 4,
         "reproducibility": 3
-      }
+      },
+      "compute_paths": [
+        "google_colab",
+        "runpod"
+      ]
     },
     {
       "id": "llm_batch_serving",
@@ -548,7 +586,11 @@
         "impact": 4,
         "depth": 3,
         "reproducibility": 3
-      }
+      },
+      "compute_paths": [
+        "runpod",
+        "lambda_labs"
+      ]
     },
     {
       "id": "llm_quantization_int8",
@@ -577,7 +619,11 @@
         "impact": 4,
         "depth": 4,
         "reproducibility": 3
-      }
+      },
+      "compute_paths": [
+        "google_colab",
+        "unsloth"
+      ]
     },
     {
       "id": "llm_inference_report",
@@ -605,7 +651,11 @@
         "impact": 3,
         "depth": 3,
         "reproducibility": 5
-      }
+      },
+      "compute_paths": [
+        "runpod",
+        "lambda_labs"
+      ]
     },
     {
       "id": "serving_vllm_setup",
@@ -633,7 +683,11 @@
         "impact": 2,
         "depth": 2,
         "reproducibility": 4
-      }
+      },
+      "compute_paths": [
+        "runpod",
+        "lambda_labs"
+      ]
     },
     {
       "id": "serving_first_request",
@@ -661,7 +715,11 @@
         "impact": 3,
         "depth": 3,
         "reproducibility": 4
-      }
+      },
+      "compute_paths": [
+        "runpod",
+        "lambda_labs"
+      ]
     },
     {
       "id": "serving_paged_attention",
@@ -689,7 +747,11 @@
         "impact": 4,
         "depth": 4,
         "reproducibility": 5
-      }
+      },
+      "compute_paths": [
+        "runpod",
+        "lambda_labs"
+      ]
     },
     {
       "id": "serving_streaming",
@@ -718,7 +780,11 @@
         "impact": 3,
         "depth": 3,
         "reproducibility": 3
-      }
+      },
+      "compute_paths": [
+        "runpod",
+        "lambda_labs"
+      ]
     },
     {
       "id": "serving_batching_under_load",
@@ -748,7 +814,11 @@
         "impact": 4,
         "depth": 3,
         "reproducibility": 3
-      }
+      },
+      "compute_paths": [
+        "runpod",
+        "lambda_labs"
+      ]
     },
     {
       "id": "serving_systems_report",
@@ -774,7 +844,11 @@
         "impact": 3,
         "depth": 3,
         "reproducibility": 5
-      }
+      },
+      "compute_paths": [
+        "runpod",
+        "lambda_labs"
+      ]
     }
   ],
   "tracks": {

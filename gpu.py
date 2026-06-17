@@ -211,19 +211,19 @@ def render_progress(tasks: List[Dict[str, Any]], completed: List[str]) -> None:
     console.print(line)
 
 
-def render_task(task: Dict[str, Any], is_current: bool = True) -> None:
+def render_task(task: Dict[str, Any], is_current: bool = True, roadmap: Optional[Dict[str, Any]] = None) -> None:
     title = task["title"]
     if is_current:
         title = f"NEXT: {title}"
     panel = Panel(
-        render_task_body(task),
+        render_task_body(task, roadmap=roadmap),
         title=f"[bold]{title}[/bold]",
         border_style="cyan" if is_current else "white",
     )
     console.print(panel)
 
 
-def render_task_body(task: Dict[str, Any]) -> Text:
+def render_task_body(task: Dict[str, Any], roadmap: Optional[Dict[str, Any]] = None) -> Text:
     text = Text()
     text.append("Mode:       ", style="bold")
     text.append(f"{task.get('mode', '?')}\n")
@@ -278,6 +278,29 @@ def render_task_body(task: Dict[str, Any]) -> Text:
         if i is not None:
             text.append("\nScore: ", style="bold")
             text.append(f"{i} x {d_} x {r} = {product}\n")
+
+    # Compute-paths hint (v0.14). Reads `task["compute_paths"]` (a list of
+    # resource ids) and resolves each to a human title from the roadmap's
+    # resources list. Renders as one line: "Run on: RunPod, Lambda Labs.
+    # See `gpu resources --domain compute` for setup notes." Only renders
+    # when the field is present and non-empty, and only when a roadmap is
+    # available to resolve the ids. Quiet otherwise, matching the Q5 spec
+    # for `gpu explain`.
+    paths = task.get("compute_paths") or []
+    if paths and roadmap is not None:
+        res_by_id = {r["id"]: r for r in (roadmap.get("resources") or [])}
+        names = []
+        for pid in paths:
+            r = res_by_id.get(pid)
+            if r is not None:
+                names.append(r.get("title", pid))
+        if names:
+            text.append("\nRun on: ", style="bold blue")
+            text.append(", ".join(names) + ".\n", style="blue")
+            text.append(
+                "  See `gpu resources --domain compute` for setup notes.\n",
+                style="dim",
+            )
 
     # When-done preview (v0.10). Tells the user what `gpu done <id>` will
     # ask before they get there, so the prompts are not a surprise.
@@ -416,18 +439,21 @@ def render_walkthrough(roadmap: Dict[str, Any], storage: Dict[str, Any]) -> None
             title="Your first task",
             border_style="yellow",
         ))
-        # 'On Mac?' hint (v0.12). Fires when the next task is in a
-        # GPU-heavy track AND the milestone is past Week 1 (i.e. Triton,
-        # LLM serving, or systems work - all of which need a Linux NVIDIA
-        # box in practice). Suppressed for Week 1's commands-bearing tasks,
+        # 'On Mac?' hint (v0.12, expanded v0.14). Fires when the next task
+        # is in a GPU-heavy track AND the milestone is past Week 1 (Triton,
+        # LLM, or systems - all of which need a Linux NVIDIA box for the
+        # full version). Suppressed for Week 1's commands-bearing tasks,
         # which the user can attempt on a Mac and fall back to notes.
-        if (first.get("track") in {"cuda", "systems"}
+        # v0.14 also points at `gpu resources --domain compute`, the
+        # per-task canonical command.
+        if (first.get("track") in {"cuda", "systems", "llm"}
                 and first.get("milestone") != "gpu_reality_check_week1"):
             console.print(
                 "[dim]On Mac? Most Week 2+ tasks need a Linux NVIDIA GPU box. "
-                "Type `gpu compute` for platform guidance.[/dim]"
+                "Type `gpu compute` for the 5 platforms, or `gpu resources --domain compute` "
+                "for per-task platform guidance.[/dim]"
             )
-        render_task(first, is_current=True)
+        render_task(first, is_current=True, roadmap=roadmap)
     else:
         console.print("[green]All tasks complete. Run `gpu score` to see the result.[/green]")
 
@@ -690,7 +716,7 @@ def start(
     render_progress(roadmap["tasks"], data["completed"])
     task = next_task(roadmap["tasks"], data["completed"])
     if task:
-        render_task(task)
+        render_task(task, roadmap=roadmap)
     else:
         console.print(_end_of_curriculum_panel(roadmap, data["completed"]))
 
@@ -704,7 +730,7 @@ def cmd_next(
     render_progress(roadmap["tasks"], data["completed"])
     task = next_task(roadmap["tasks"], data["completed"])
     if task:
-        render_task(task)
+        render_task(task, roadmap=roadmap)
     else:
         console.print(_end_of_curriculum_panel(roadmap, data["completed"]))
 
@@ -718,7 +744,7 @@ def status(
     render_progress(roadmap["tasks"], data["completed"])
     task = next_task(roadmap["tasks"], data["completed"])
     if task:
-        render_task(task)
+        render_task(task, roadmap=roadmap)
     else:
         console.print("[green]All tasks complete.[/green]")
     render_tracks(roadmap, data["completed"])
@@ -847,7 +873,7 @@ def done(
 
     nxt = next_task(roadmap["tasks"], data["completed"])
     if nxt:
-        render_task(nxt)
+        render_task(nxt, roadmap=roadmap)
     else:
         console.print(_end_of_curriculum_panel(roadmap, data["completed"]))
 

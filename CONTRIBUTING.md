@@ -24,9 +24,18 @@ Append a new entry with the existing schema:
   "skills": { "cuda_execution_model": 5 },
   "prerequisites": ["<other task id>"],
   "commands": ["$ <command>", "$ <other command>"],
+  "compute_paths": ["runpod", "lambda_labs"],
   "bottleneck_pick": false,
   "reality_check": ""
 }
+
+`compute_paths` is a list of resource ids from the top-level
+`resources` list. Set it on any Week 2+ task that has `commands[]`
+and that needs a Linux NVIDIA GPU box. The per-task card renders
+it as `Run on: RunPod, Lambda Labs. See \`gpu resources --domain
+compute\` for setup notes.` Use the existing compute platforms
+(google_colab, kaggle_notebooks, unsloth, runpod, lambda_labs)
+unless you have a real reason to add a new resource.
 ```
 
 Only `id`, `milestone`, `track`, `title`, `objective`, `constraint`,

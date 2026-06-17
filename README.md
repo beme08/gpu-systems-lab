@@ -105,6 +105,7 @@ This project was built bottom-up so you can ship each version on its own:
 | v0.11 | Timestamps (`completed_at`) + 'Last activity' line in `status` + reality-check prompt scaffold + 'Next milestone' line + `gpu done <completed>` tip | done |
 | v0.12 | Multi-week curriculum (Week 2 Triton, Week 3 LLM inference, Week 4 GPU serving - 18 new tasks, 3 new milestones) + 5 platform resources + `gpu compute` command + 'On Mac?' walkthrough hint | done |
 | v0.13 | Milestone-aware end-of-curriculum panel (replaces v0.6 'Phase 1 complete' copy in `done` / `start` / `next`) | done |
+| v0.14 | Compute-platform task wiring: `compute_paths` on Week 2+ tasks + per-task 'Run on:' hint in the task card + expanded 'On Mac?' walkthrough hint | done |
 
 ## Tracks
 
