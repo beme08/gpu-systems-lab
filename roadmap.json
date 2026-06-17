@@ -240,7 +240,39 @@
         "impact": 4,
         "depth": 4,
         "reproducibility": 3
-      }
+      },
+      "teaching_prompts": [
+        {
+          "question": "What does 'SOL' mean in ncu's Speed Of Light report, and why does it matter for kernel optimization?",
+          "expected_keywords": [
+            "speed",
+            "light",
+            "roofline",
+            "throughput",
+            "sm",
+            "achieve",
+            "percent"
+          ],
+          "follow_up_if_match": "Right. SOL is a roofline-style metric: how close this kernel is to the theoretical peak. Sub-50% usually means memory bound; >70% means you're near the ceiling and need a different algorithm.",
+          "follow_up_if_miss": "Hint: SOL = Speed Of Light. It's a percent, against the GPU's theoretical peak for that resource (memory bandwidth, SM throughput, etc.). A 100% SOL means the kernel is at the ceiling."
+        },
+        {
+          "question": "If SOL is 30% and the bottleneck says 'memory_bound', what's the first thing you'd try?",
+          "expected_keywords": [
+            "vector",
+            "load",
+            "coalesce",
+            "occupancy",
+            "bandwidth",
+            "float4",
+            "tiled",
+            "shared",
+            "memory"
+          ],
+          "follow_up_if_match": "Yes. Either get more bytes per thread (vectorized loads) or get more in-flight loads (occupancy / shared-memory tiling) so the SMs are fed. Both at once is the typical CUDA optimization play.",
+          "follow_up_if_miss": "Two common answers: (a) use vectorized loads (float4 / int4) to widen the memory access, (b) increase occupancy so more warps are in flight hiding the latency."
+        }
+      ]
     },
     {
       "id": "pytorch_matmul",

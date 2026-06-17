@@ -54,8 +54,16 @@ feedback via `give_teaching_feedback`, and appends the record to
 `gpu explain --id <id>`. Tasks without `teaching_prompts` are
 unaffected.
 
-Hand-coded feedback only in v0.16. v0.17 is the conversation
-about whether to add an LLM call for richer feedback.
+Hand-coded feedback in v0.16; v0.17 added an optional LLM
+feedback path gated on `OPENAI_API_KEY`. The user runs
+`gpu teach <id> --llm` to get an LLM-generated feedback line in
+addition to the hand-coded one. The LLM call uses stdlib (urllib)
+only - no `openai` SDK, no subprocess. The LLM path is additive
+and never blocking: if the env var is missing or the API call
+fails, the hand-coded feedback still records and the command
+exits 0. The LLM feedback is stored as `llm_feedback` on the
+teaching record and rendered as a 5th column in `gpu explain
+--id <id>`.
 ```
 
 Only `id`, `milestone`, `track`, `title`, `objective`, `constraint`,

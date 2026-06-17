@@ -49,7 +49,7 @@ Some tasks additionally require:
 | `gpu compute`  | Show where to run GPU tasks (compute platforms with Good-for / Not-good-for columns; `--open <id>` launches a URL). |
 | `gpu score` | Show weighted program + per-track + per-milestone score. |
 | `gpu check`    | Run a pending reality check on demand. |
-| `gpu teach <id>`	| Run the interactive teaching flow for a task (multi-step prompts with hand-coded feedback). |
+| `gpu teach <id> [--llm]`	| Run the interactive teaching flow for a task (multi-step prompts with hand-coded feedback; `--llm` adds an LLM feedback line if `OPENAI_API_KEY` is set). |
 | `gpu explain`  | Show recorded bottleneck + reality-check log. |
 | `gpu tasks`    | List all task ids with completion marks. |
 | `gpu reset`    | Wipe all progress (asks first). |
@@ -109,6 +109,7 @@ This project was built bottom-up so you can ship each version on its own:
 | v0.14 | Compute-platform task wiring: `compute_paths` on Week 2+ tasks + per-task 'Run on:' hint in the task card + expanded 'On Mac?' walkthrough hint | done |
 | v0.15 | Distillation track (6 Week 5+ tasks: int8 PTQ, LoRA, teacher-student KD, eval comparison, int4 quant, synthesis) + 3 new skills + 5th milestone | done |
 | v0.16 | Interactive teaching primitives: `teaching_prompts` field on tasks + `gpu teach <id>` command + hand-coded keyword feedback + teaching log in `gpu explain` (Candidate C from issue #2) | done |
+| v0.17 | Optional LLM feedback via `gpu teach --llm` (OPENAI_API_KEY-gated, stdlib-only) + `teaching_prompts` on `ncu_profile` + pre-commit hook email-regex tightening (fixes the v0.12.2 `company.com` allowlist leak and the `@app.command` false positive) | done |
 
 ## Tracks
 

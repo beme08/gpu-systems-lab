@@ -705,8 +705,65 @@ def give_teaching_feedback(answer: str, prompt: Dict[str, Any]) -> str:
     return prompt.get("follow_up_if_miss") or "Consider: " + ", ".join(kws[:3]) + "."
 
 
-def prompt_teaching(task: Dict[str, Any], data: Dict[str, Any], task_id: str, index: int = 0) -> None:
-    """Run ONE step of the multi-step teaching flow for a task. v0.16.
+def ask_llm_feedback(answer: str, question: str, api_key: str) -> Optional[str]:
+    """Optional LLM-generated feedback for a teaching answer. v0.17.
+
+    Calls the OpenAI Chat Completions API (gpt-4o-mini by default) over
+    HTTPS using stdlib only (no `openai` SDK, no subprocess). Returns
+    the assistant's text reply, or None on any error. The caller should
+    treat None as 'LLM unavailable' and fall back to the hand-coded
+    feedback; this function never raises.
+
+    Cost guard: max 200 tokens per call. Time guard: 8s timeout. Both are
+    conservative; the use case is a short feedback line, not a long essay.
+    """
+    if not api_key:
+        return None
+    try:
+        import json as _json
+        import urllib.request
+        import urllib.error
+        body = _json.dumps({
+            "model": "gpt-4o-mini",
+            "max_tokens": 200,
+            "messages": [
+                {"role": "system", "content": (
+                    "You are a brief, encouraging tutor for a GPU systems engineering learner. "
+                    "Given the question and the user's answer, give 1-2 sentences of feedback. "
+                    "If the answer is right, affirm it. If it misses, name the key idea they should "
+                    "add. No preamble, no bullet points, no markdown."
+                )},
+                {"role": "user", "content": f"Question: {question}\n\nAnswer: {answer}"},
+            ],
+        }).encode("utf-8")
+        req = urllib.request.Request(
+            "https://api.openai.com/v1/chat/completions",
+            data=body,
+            headers={
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json",
+            },
+        )
+        with urllib.request.urlopen(req, timeout=8) as resp:
+            payload = _json.loads(resp.read().decode("utf-8"))
+        choices = payload.get("choices") or []
+        if not choices:
+            return None
+        msg = (choices[0].get("message") or {}).get("content") or ""
+        return msg.strip() or None
+    except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError, ValueError, KeyError, OSError):
+        # Any failure: fall back to hand-coded. Never raise.
+        return None
+
+
+def prompt_teaching(
+    task: Dict[str, Any],
+    data: Dict[str, Any],
+    task_id: str,
+    index: int = 0,
+    use_llm: bool = False,
+) -> None:
+    """Run ONE step of the multi-step teaching flow for a task. v0.16 + v0.17.
 
     Renders `task["teaching_prompts"][index]`, reads a free-text answer
     (the user can type 'skip' to leave blank), computes feedback via
@@ -714,6 +771,12 @@ def prompt_teaching(task: Dict[str, Any], data: Dict[str, Any], task_id: str, in
     `data["teaching"][task_id]`. The caller (the `done` flow or the
     `gpu teach` command) is responsible for looping and passing the
     correct `index`.
+
+    If `use_llm` is True and the OPENAI_API_KEY env var is set, also
+    calls `ask_llm_feedback` and stores the LLM response as
+    `llm_feedback` on the record. The hand-coded feedback is always
+    stored alongside (as `feedback`); the LLM feedback is additive.
+    Falls back silently to None if the LLM call fails.
 
     Quiet no-op if `index` is out of range for the task's
     `teaching_prompts` list.
@@ -732,15 +795,22 @@ def prompt_teaching(task: Dict[str, Any], data: Dict[str, Any], task_id: str, in
     except (typer.Abort, EOFError, KeyboardInterrupt):
         ans = "skip"
     feedback = "" if ans.lower() == "skip" else give_teaching_feedback(ans, p)
+    llm_feedback = None
+    if use_llm and ans.lower() != "skip":
+        llm_feedback = ask_llm_feedback(ans, p["question"], os.environ.get("OPENAI_API_KEY", ""))
     record = {
         "question": p["question"],
         "answer": ans,
         "feedback": feedback,
         "asked_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
     }
+    if llm_feedback is not None:
+        record["llm_feedback"] = llm_feedback
     data.setdefault("teaching", {}).setdefault(task_id, []).append(record)
     if feedback:
         console.print(f"[blue]Feedback:[/blue] {feedback}")
+    if llm_feedback:
+        console.print(f"[magenta]LLM feedback:[/magenta] {llm_feedback}")
 
 
 # ----------------------------------------------------------------------------
@@ -1065,22 +1135,28 @@ def _render_explain_task(task_id: str, data: Dict[str, Any]) -> None:
         )
         console.print(Panel(body, title="BENCHMARK", border_style="green"))
 
-    # Teaching log (v0.16). Q5-style: quiet when absent.
+    # Teaching log (v0.16 + v0.17). Q5-style: quiet when absent.
     teaching_log = data.get("teaching", {}).get(task_id) or []
     if teaching_log:
         from rich.table import Table as _TT
+        has_llm = any("llm_feedback" in e for e in teaching_log)
         tt = _TT(title="TEACHING", show_header=True, header_style="bold blue")
         tt.add_column("#", style="dim", width=3)
         tt.add_column("Question", style="cyan", overflow="fold")
         tt.add_column("Answer", style="white", overflow="fold")
         tt.add_column("Feedback", style="blue", overflow="fold")
+        if has_llm:
+            tt.add_column("LLM", style="magenta", overflow="fold")
         for i, entry in enumerate(teaching_log, 1):
-            tt.add_row(
+            row = [
                 str(i),
                 entry.get("question", ""),
                 entry.get("answer", "") or "[dim](skipped)[/dim]",
                 entry.get("feedback", "") or "[dim](no feedback)[/dim]",
-            )
+            ]
+            if has_llm:
+                row.append(entry.get("llm_feedback", "") or "[dim](none)[/dim]")
+            tt.add_row(*row)
         console.print(tt)
 
     if not (bid or ans or rec or teaching_log):
@@ -1119,14 +1195,24 @@ def check(
 @app.command()
 def teach(
     task_id: str = typer.Argument(..., help="Task id to run the teaching flow on"),
+    llm: bool = typer.Option(
+        False,
+        "--llm",
+        help="Also generate LLM feedback (requires OPENAI_API_KEY env var; v0.17).",
+    ),
 ):
-    """Run the interactive teaching flow for a task (v0.16).
+    """Run the interactive teaching flow for a task (v0.16 + v0.17).
 
     Walks the task's `teaching_prompts` list, with hand-coded feedback at
     each step. The user can type 'skip' to leave an answer blank. Existing
     answers (from a prior `gpu done` or `gpu teach` run) are not re-asked.
     The teaching log is stored in `storage.json` under the `teaching` key
     and is visible via `gpu explain --id <task_id>`.
+
+    Pass --llm to also generate an LLM feedback line per answer (v0.17).
+    Requires the OPENAI_API_KEY env var. If the env var is missing or the
+    API call fails, the hand-coded feedback still records and the command
+    exits 0; the LLM path is additive, never blocking.
 
     Tasks without a `teaching_prompts` field are a no-op with a clear message.
     """
@@ -1146,15 +1232,36 @@ def teach(
         console.print("to the task in roadmap.json to enable it.")
         return
     answered = len(data.get("teaching", {}).get(task_id, []))
-    if answered >= len(teaching):
+    has_llm = any("llm_feedback" in e for e in data.get("teaching", {}).get(task_id, []))
+    if answered >= len(teaching) and not (llm and not has_llm):
         console.print(f"[green]Teaching for {task_id} already complete ({answered}/{len(teaching)} prompts answered).[/green]")
         console.print(f"Run `gpu explain --id {task_id}` to view the recorded log.")
         return
+    if answered >= len(teaching) and llm and not has_llm:
+        # The user is asking to add LLM feedback to the existing log. Reset
+        # the "already answered" state so the loop re-runs and adds new
+        # records with llm_feedback set. We keep the existing entries in
+        # storage.json by NOT deleting them; the loop will append new ones.
+        # But the loop's `already > i` gate would skip re-asking. The
+        # simplest fix: clear the entry under data['teaching'][task_id] so
+        # the loop re-prompts. Existing entries are removed - we want a
+        # clean re-run with LLM feedback attached.
+        if task_id in data.get("teaching", {}):
+            del data["teaching"][task_id]
+        console.print(
+            f"[blue]--llm: re-running {len(teaching)} prompts to attach LLM feedback.[/blue]"
+        )
+    if llm and not os.environ.get("OPENAI_API_KEY"):
+        console.print(
+            "[yellow]--llm requested but OPENAI_API_KEY is not set.[/yellow]\n"
+            "Falling back to hand-coded feedback only. To enable LLM feedback:\n"
+            "  export OPENAI_API_KEY=sk-...   (then re-run)"
+        )
     for i in range(len(teaching)):
         already = len(data.get("teaching", {}).get(task_id, []))
         if already > i:
             continue
-        prompt_teaching(task, data, task_id, i)
+        prompt_teaching(task, data, task_id, i, use_llm=llm)
         recent = data.get("teaching", {}).get(task_id, [])
         if recent and recent[-1].get("answer", "").lower() == "skip":
             break

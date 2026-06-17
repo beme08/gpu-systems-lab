@@ -34,17 +34,9 @@ EMAIL_ALLOWLIST=(
   'example\.com'
   'example\.org'
   'example\.net'
-  'company\.com'
-  'you@company\.com'
   'noreply@github\.com'
   'noreply@users\.noreply\.github\.com'
   'users\.noreply\.github\.com'
-  # Common Python decorator patterns that look like emails to the regex
-  # but never are (the "TLD" is followed by "(" or whitespace, not letters).
-  '@app\.command'
-  '@click\.command'
-  '@pytest\.fixture'
-  '@pytest\.mark'
 )
 
 # File-name rules. Reject staged additions of these names (anywhere in the path).
@@ -52,7 +44,7 @@ DISALLOW_PATH_RE='(^|/)\.env(\.[^/]+)?$'
 ALLOW_PATH_RE='(^|/)\.env\.(example|sample|template)$'
 
 # Email detector: any [A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}
-EMAIL_RE='[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}'
+EMAIL_RE='[A-Za-z0-9][A-Za-z0-9._%+-]*@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.(com|org|net|io|dev|ai|app|co|us|uk|de|jp|edu|gov|me|info|biz|xyz|fm|cloud|run|tech|ml|data|life|world|works|ninja|rocks|gg|sh|ly)'
 
 # Path filter: skip the .githooks/ directory (it documents the patterns as text).
 PATH_EXCLUDE_RE='^\.githooks/'
