@@ -677,6 +677,57 @@
       "compute_paths": [
         "runpod",
         "lambda_labs"
+      ],
+      "teaching_prompts": [
+        {
+          "question": "At what batch size does LLM throughput stop scaling? Why?",
+          "expected_keywords": [
+            "kv",
+            "cache",
+            "memory",
+            "batch",
+            "saturate",
+            "memory bound",
+            "compute bound",
+            "token",
+            "throughput"
+          ],
+          "expected_answers": [
+            {
+              "pattern": "kv.?(cache|pressure)|cache.?(pressure|size)|memory.?(bound|limit)|oom|out of memory",
+              "response": "Right - the dominant ceiling is KV-cache memory, not compute. At small batches the GPU is underutilized; throughput grows. Past a point, KV-cache growth per sequence fills HBM and you have to either truncate, evict, or paged-attend. The compute-vs-memory crossover is batch-specific."
+            },
+            {
+              "pattern": "compute|sm|gpu.?(busy|util)|tensor",
+              "response": "Compute saturation does happen, but it is usually the second ceiling, not the first. The first wall is KV-cache memory, not arithmetic throughput."
+            }
+          ],
+          "common_misconceptions": [
+            {
+              "pattern": "\\b(prompt\\b).*?length|input length|text length|sequence length",
+              "response": "Sequence length matters but it is not the throughput ceiling per se. What hurts at large batch is per-sequence KV-cache growth compounding with batch size. Prompt length only sets the starting KV size, not the per-step growth rate."
+            }
+          ],
+          "follow_up_if_match": "Good. How would you measure where the crossover is in practice (which number on which dashboard)?",
+          "follow_up_if_miss": "Hint: think about what scales linearly with batch size, and what stays fixed. The thing that scales is what hurts first."
+        },
+        {
+          "question": "Pick one: a system that hits 'compute bound' at batch=8, vs one that hits 'memory bound' at batch=8. Which is easier to scale further, and why?",
+          "expected_keywords": [
+            "memory",
+            "batch",
+            "scale",
+            "tensor",
+            "parallel",
+            "kv",
+            "cache",
+            "page",
+            "quantiz",
+            "compress"
+          ],
+          "follow_up_if_match": "Right. Memory-bound is usually easier to scale because you have more knobs (KV eviction, paged attention, int8/int4 quant of KV, sequence parallelism). Compute-bound at small batch is often a sign of an under-optimized kernel, not a real ceiling.",
+          "follow_up_if_miss": "Hint: think about which has more 'knobs' to turn. Memory pressure has a stack of techniques (paging, eviction, quantization). Compute pressure at batch=8 is usually fixable with a better kernel, not a fundamental limit."
+        }
       ]
     },
     {
@@ -806,6 +857,56 @@
       "compute_paths": [
         "runpod",
         "lambda_labs"
+      ],
+      "teaching_prompts": [
+        {
+          "question": "Why does vLLM beat raw transformers on throughput even for a single request?",
+          "expected_keywords": [
+            "paged",
+            "attention",
+            "kv",
+            "cache",
+            "memory",
+            "continuous",
+            "batching",
+            "scheduler",
+            "block"
+          ],
+          "expected_answers": [
+            {
+              "pattern": "paged.?(attention|kv)|kv.?(cache|paging)|block.?(size|table)|fragmentation",
+              "response": "Right - PagedAttention is the headline. It stores KV in fixed-size blocks (like virtual memory pages), so the allocator can pack sequences tightly without reserving worst-case contiguous memory. That means you fit more concurrent sequences in the same HBM, so even single-request steady-state is more efficient because the scheduler keeps the GPU fed between requests."
+            },
+            {
+              "pattern": "continuous.?(batching)|iterative.?(scheduler)|dynamic.?(batch)",
+              "response": "Continuous batching is half the answer. vLLM's scheduler swaps finished sequences out and new ones in at every decode step, so the GPU is never idle waiting for a batch to fill. PagedAttention is the other half - they need each other to work well."
+            }
+          ],
+          "common_misconceptions": [
+            {
+              "pattern": "faster.*kernel|optimized.*cuda|custom.?(kernel|cuda)|flash.?attention",
+              "response": "Faster kernels matter but they are not what makes vLLM beat raw transformers on a single request. The win is in the scheduler + memory allocator, not the matmul speed."
+            }
+          ],
+          "follow_up_if_match": "Good. What changes if you disable PagedAttention but keep continuous batching?",
+          "follow_up_if_miss": "Hint: it is not a faster kernel. It is how the system manages memory and schedules work between requests."
+        },
+        {
+          "question": "What changes if you disable PagedAttention but keep continuous batching?",
+          "expected_keywords": [
+            "memory",
+            "kv",
+            "fragment",
+            "waste",
+            "sequence",
+            "length",
+            "reservation",
+            "block",
+            "paging"
+          ],
+          "follow_up_if_match": "Right. Without PagedAttention, KV is reserved worst-case contiguous, so the scheduler can only fit a few sequences. Continuous batching still swaps requests, but the per-sequence memory overhead is much higher, so concurrency drops and you are back near raw-transformer throughput.",
+          "follow_up_if_miss": "Hint: continuous batching without PagedAttention means each sequence still reserves worst-case contiguous KV. The scheduler can swap, but the per-sequence memory cost is much higher, so concurrency drops."
+        }
       ]
     },
     {
