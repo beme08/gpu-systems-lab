@@ -39,6 +39,12 @@ EMAIL_ALLOWLIST=(
   'noreply@github\.com'
   'noreply@users\.noreply\.github\.com'
   'users\.noreply\.github\.com'
+  # Common Python decorator patterns that look like emails to the regex
+  # but never are (the "TLD" is followed by "(" or whitespace, not letters).
+  '@app\.command'
+  '@click\.command'
+  '@pytest\.fixture'
+  '@pytest\.mark'
 )
 
 # File-name rules. Reject staged additions of these names (anywhere in the path).

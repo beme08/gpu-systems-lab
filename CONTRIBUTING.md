@@ -36,6 +36,26 @@ it as `Run on: RunPod, Lambda Labs. See \`gpu resources --domain
 compute\` for setup notes.` Use the existing compute platforms
 (google_colab, kaggle_notebooks, unsloth, runpod, lambda_labs)
 unless you have a real reason to add a new resource.
+
+## Adding teaching prompts (v0.16)
+
+`teaching_prompts` is a list of objects on a task. Each entry has:
+
+- `question`: a free-text question to ask the user.
+- `expected_keywords`: a list of substrings the answer is checked
+  against (case-insensitive). 2+ hits = "match".
+- `follow_up_if_match`: the feedback string when 2+ keywords hit.
+- `follow_up_if_miss`: the feedback string when 0-1 keywords hit.
+
+When `gpu done <id>` (or `gpu teach <id>`) hits a task with
+`teaching_prompts`, it walks the list, prompts the user, computes
+feedback via `give_teaching_feedback`, and appends the record to
+`storage.json["teaching"][task_id]`. The log is visible via
+`gpu explain --id <id>`. Tasks without `teaching_prompts` are
+unaffected.
+
+Hand-coded feedback only in v0.16. v0.17 is the conversation
+about whether to add an LLM call for richer feedback.
 ```
 
 Only `id`, `milestone`, `track`, `title`, `objective`, `constraint`,

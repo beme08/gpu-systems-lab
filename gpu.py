@@ -75,6 +75,7 @@ def default_storage(roadmap: Dict[str, Any]) -> Dict[str, Any]:
         "benchmarks": {},    # task_id -> {path, summary, recorded_at}
         "welcomed": False,   # True once gpu start has shown the first-run walkthrough
         "completed_at": {},  # task_id -> ISO 8601 UTC string ("when was this task done")
+        "teaching": {},      # task_id -> list of {question, answer, feedback, asked_at} (v0.16)
     }
 
 
@@ -120,6 +121,7 @@ def load_storage() -> Dict[str, Any]:
         data.setdefault(key, {} if key != "completed" else [])
     data.setdefault("welcomed", False)
     data.setdefault("completed_at", {})
+    data.setdefault("teaching", {})
     return data
 
 
@@ -684,6 +686,64 @@ def prompt_reality(task: Dict[str, Any]) -> str:
 
 
 # ----------------------------------------------------------------------------
+# Teaching prompts (v0.16)
+# ----------------------------------------------------------------------------
+
+def give_teaching_feedback(answer: str, prompt: Dict[str, Any]) -> str:
+    """Hand-coded feedback for a teaching answer. v0.16.
+
+    Counts how many of the prompt's `expected_keywords` (case-insensitive,
+    whole-word) appear in the answer. 2+ hits -> "match" -> return
+    `follow_up_if_match`. 0-1 hits -> "miss" -> return `follow_up_if_miss`.
+    No LLM call. v0.17 is the conversation about whether to add one.
+    """
+    kws = [str(k).lower() for k in (prompt.get("expected_keywords") or [])]
+    ans = (answer or "").lower()
+    hits = sum(1 for k in kws if k and k in ans)
+    if hits >= 2:
+        return prompt.get("follow_up_if_match") or "Good."
+    return prompt.get("follow_up_if_miss") or "Consider: " + ", ".join(kws[:3]) + "."
+
+
+def prompt_teaching(task: Dict[str, Any], data: Dict[str, Any], task_id: str, index: int = 0) -> None:
+    """Run ONE step of the multi-step teaching flow for a task. v0.16.
+
+    Renders `task["teaching_prompts"][index]`, reads a free-text answer
+    (the user can type 'skip' to leave blank), computes feedback via
+    `give_teaching_feedback`, and appends the record to
+    `data["teaching"][task_id]`. The caller (the `done` flow or the
+    `gpu teach` command) is responsible for looping and passing the
+    correct `index`.
+
+    Quiet no-op if `index` is out of range for the task's
+    `teaching_prompts` list.
+    """
+    prompts = task.get("teaching_prompts") or []
+    if index < 0 or index >= len(prompts):
+        return
+    p = prompts[index]
+    console.print(Panel(
+        f"Teaching Prompt ({index + 1}/{len(prompts)})\n\n{p['question']}",
+        title="Teaching",
+        border_style="blue",
+    ))
+    try:
+        ans = typer.prompt("Your answer (or 'skip')").strip()
+    except (typer.Abort, EOFError, KeyboardInterrupt):
+        ans = "skip"
+    feedback = "" if ans.lower() == "skip" else give_teaching_feedback(ans, p)
+    record = {
+        "question": p["question"],
+        "answer": ans,
+        "feedback": feedback,
+        "asked_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+    }
+    data.setdefault("teaching", {}).setdefault(task_id, []).append(record)
+    if feedback:
+        console.print(f"[blue]Feedback:[/blue] {feedback}")
+
+
+# ----------------------------------------------------------------------------
 # Commands
 # ----------------------------------------------------------------------------
 
@@ -869,6 +929,23 @@ def done(
             err=True,
         )
 
+    # Teaching flow (v0.16). Multi-step prompts with hand-coded feedback.
+    # Fires AFTER the bench summary so the user is in a single, predictable
+    # prompt cadence: bottleneck -> reality -> bench summary -> teaching.
+    # The user can 'skip' at any step. Quiet if the task has no
+    # teaching_prompts.
+    teaching = task.get("teaching_prompts") or []
+    if teaching:
+        for i in range(len(teaching)):
+            already = len(data.get("teaching", {}).get(task_id, []))
+            if already > i:
+                # Already answered; skip without re-asking.
+                continue
+            prompt_teaching(task, data, task_id, i)
+            recent = data.get("teaching", {}).get(task_id, [])
+            if recent and recent[-1].get("answer", "").lower() == "skip":
+                break
+
     save_storage(data)
     console.print(f"[green]Completed:[/green] {task['title']}")
 
@@ -957,6 +1034,16 @@ def explain(
             )
         console.print(bk)
 
+    if data.get("teaching"):
+        tk = Table(title="Teaching Log")
+        tk.add_column("Task", style="cyan")
+        tk.add_column("Prompts", style="dim", justify="right")
+        tk.add_column("Last asked", style="dim")
+        for tid, log in data["teaching"].items():
+            last = log[-1].get("asked_at", "") if log else ""
+            tk.add_row(tid, str(len(log)), last)
+        console.print(tk)
+
 
 def _render_explain_task(task_id: str, data: Dict[str, Any]) -> None:
     """Render the focused per-task view used by ``gpu explain --id``."""
@@ -978,7 +1065,25 @@ def _render_explain_task(task_id: str, data: Dict[str, Any]) -> None:
         )
         console.print(Panel(body, title="BENCHMARK", border_style="green"))
 
-    if not (bid or ans or rec):
+    # Teaching log (v0.16). Q5-style: quiet when absent.
+    teaching_log = data.get("teaching", {}).get(task_id) or []
+    if teaching_log:
+        from rich.table import Table as _TT
+        tt = _TT(title="TEACHING", show_header=True, header_style="bold blue")
+        tt.add_column("#", style="dim", width=3)
+        tt.add_column("Question", style="cyan", overflow="fold")
+        tt.add_column("Answer", style="white", overflow="fold")
+        tt.add_column("Feedback", style="blue", overflow="fold")
+        for i, entry in enumerate(teaching_log, 1):
+            tt.add_row(
+                str(i),
+                entry.get("question", ""),
+                entry.get("answer", "") or "[dim](skipped)[/dim]",
+                entry.get("feedback", "") or "[dim](no feedback)[/dim]",
+            )
+        console.print(tt)
+
+    if not (bid or ans or rec or teaching_log):
         console.print("[yellow]No records for this task.[/yellow]")
 
 
@@ -1009,6 +1114,52 @@ def check(
         data["reality"][task["id"]] = ans.strip()
         save_storage(data)
         console.print("[green]Stored.[/green]")
+
+
+@app.command()
+def teach(
+    task_id: str = typer.Argument(..., help="Task id to run the teaching flow on"),
+):
+    """Run the interactive teaching flow for a task (v0.16).
+
+    Walks the task's `teaching_prompts` list, with hand-coded feedback at
+    each step. The user can type 'skip' to leave an answer blank. Existing
+    answers (from a prior `gpu done` or `gpu teach` run) are not re-asked.
+    The teaching log is stored in `storage.json` under the `teaching` key
+    and is visible via `gpu explain --id <task_id>`.
+
+    Tasks without a `teaching_prompts` field are a no-op with a clear message.
+    """
+    roadmap = load_roadmap()
+    data = load_storage()
+    task = task_by_id(roadmap, task_id)
+    if task is None:
+        console.print(f"[red]Unknown task id: {task_id}[/red]")
+        console.print("Valid ids:")
+        for t in roadmap["tasks"]:
+            console.print(f"  - {t['id']}")
+        raise typer.Exit(1)
+    teaching = task.get("teaching_prompts") or []
+    if not teaching:
+        console.print(f"[yellow]No teaching prompts for {task_id}.[/yellow]")
+        console.print("Teaching is opt-in per task. Add a 'teaching_prompts' field")
+        console.print("to the task in roadmap.json to enable it.")
+        return
+    answered = len(data.get("teaching", {}).get(task_id, []))
+    if answered >= len(teaching):
+        console.print(f"[green]Teaching for {task_id} already complete ({answered}/{len(teaching)} prompts answered).[/green]")
+        console.print(f"Run `gpu explain --id {task_id}` to view the recorded log.")
+        return
+    for i in range(len(teaching)):
+        already = len(data.get("teaching", {}).get(task_id, []))
+        if already > i:
+            continue
+        prompt_teaching(task, data, task_id, i)
+        recent = data.get("teaching", {}).get(task_id, [])
+        if recent and recent[-1].get("answer", "").lower() == "skip":
+            break
+    save_storage(data)
+    console.print(f"[green]Teaching log saved for {task_id}.[/green]")
 
 
 @app.command()

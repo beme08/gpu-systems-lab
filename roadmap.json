@@ -154,7 +154,34 @@
         "impact": 4,
         "depth": 3,
         "reproducibility": 4
-      }
+      },
+      "teaching_prompts": [
+        {
+          "question": "Why is vector add usually memory-bound? Answer in 2 sentences.",
+          "expected_keywords": [
+            "memory",
+            "bandwidth",
+            "element",
+            "flop"
+          ],
+          "follow_up_if_match": "Good. Now: how would you change the kernel to be compute-bound instead? (one sentence is fine)",
+          "follow_up_if_miss": "Hint: think about the ratio of bytes read+written to FLOPs performed. A 1:1 element-wise op usually does very few FLOPs per element."
+        },
+        {
+          "question": "How would you make vector add faster without changing the algorithm?",
+          "expected_keywords": [
+            "vector",
+            "width",
+            "load",
+            "fused",
+            "memory",
+            "bandwidth",
+            "occupancy"
+          ],
+          "follow_up_if_match": "Right. Vectorized loads + higher occupancy is the standard answer; the wall-clock win is usually 2-4x on a memory-bound kernel.",
+          "follow_up_if_miss": "Two common answers: (a) load 4 floats at a time with float4 / vector loads, (b) increase occupancy so more in-flight loads hide the latency."
+        }
+      ]
     },
     {
       "id": "nsys_profile",
