@@ -25,6 +25,18 @@
     {
       "id": "llm_systems",
       "name": "LLM Systems"
+    },
+    {
+      "id": "quantization",
+      "name": "Quantization"
+    },
+    {
+      "id": "knowledge_distillation",
+      "name": "Knowledge Distillation"
+    },
+    {
+      "id": "lora_methods",
+      "name": "LoRA & Parameter-Efficient Fine-Tuning"
     }
   ],
   "tasks": [
@@ -849,6 +861,199 @@
         "runpod",
         "lambda_labs"
       ]
+    },
+    {
+      "id": "distill_quant_int8_baseline",
+      "title": "Quantize a teacher model to int8 (PTQ) and measure the gap",
+      "mode": "GPU System Lab",
+      "objective": "Take a small open model (Qwen2.5-0.5B / SmolLM2-360M), apply post-training int8 quantization (bitsandbytes or torchao), and measure latency, peak memory, and perplexity against the fp16 baseline. Quantize-aware-distillation is later; this task is just the baseline.",
+      "deliverable": "notes/distill_quant_int8.md with the fp16 vs int8 latency, peak memory, and a 1-paragraph note on where the gap shows up in perplexity.",
+      "commands": [
+        "pip install -U transformers accelerate bitsandbytes",
+        "python -c \"from transformers import AutoModelForCausalLM; m = AutoModelForCausalLM.from_pretrained('Qwen/Qwen2.5-0.5B', load_in_8bit=True, device_map='auto'); print(m.get_memory_footprint()/1e9, 'GB')\""
+      ],
+      "skills": {
+        "quantization": 5,
+        "llm_systems": 5
+      },
+      "track": "distillation",
+      "prerequisites": [
+        "llm_inference_report"
+      ],
+      "unlocks": [
+        "distill_lora_finetune"
+      ],
+      "milestone": "distillation_track",
+      "score": {
+        "impact": 2,
+        "depth": 2,
+        "reproducibility": 4
+      },
+      "compute_paths": [
+        "google_colab",
+        "runpod"
+      ]
+    },
+    {
+      "id": "distill_lora_finetune",
+      "title": "LoRA fine-tune a small model on a domain corpus",
+      "mode": "GPU System Lab",
+      "objective": "LoRA-fine-tune Qwen2.5-0.5B on a small domain corpus (e.g. 5k samples from a public dataset) using PEFT. Compare adapter weights to a full-fine-tune baseline in parameter count only.",
+      "deliverable": "reports/distill_lora_report.md with adapter rank, target modules, training loss curve description, and a 1-paragraph note on what the adapter learned.",
+      "commands": [
+        "pip install -U peft trl datasets",
+        "python -c \"from peft import LoraConfig, get_peft_model; print('peft ready')\"",
+        "python train_lora.py   # user-supplied: see deliverable"
+      ],
+      "skills": {
+        "lora_methods": 5,
+        "quantization": 3,
+        "llm_systems": 5
+      },
+      "track": "distillation",
+      "prerequisites": [
+        "distill_quant_int8_baseline"
+      ],
+      "unlocks": [
+        "distill_teacher_student_train"
+      ],
+      "milestone": "distillation_track",
+      "score": {
+        "impact": 2,
+        "depth": 3,
+        "reproducibility": 3
+      },
+      "compute_paths": [
+        "runpod",
+        "lambda_labs"
+      ]
+    },
+    {
+      "id": "distill_teacher_student_train",
+      "title": "Train a student model to match a teacher (logit KD)",
+      "mode": "GPU System Lab",
+      "objective": "Train a small student (e.g. SmolLM2-135M) to mimic a larger teacher (Qwen2.5-0.5B) by matching output logits. Use temperature-scaled KL divergence as the loss; freeze the teacher; train the student for a few hundred steps on a domain corpus.",
+      "deliverable": "reports/distill_kd_report.md with loss curve, temperature, alpha, and a 1-paragraph note on where the student catches up to the teacher.",
+      "commands": [
+        "python train_distill.py --teacher Qwen/Qwen2.5-0.5B --student HuggingFaceTB/SmolLM2-135M --T 2.0 --alpha 0.7"
+      ],
+      "skills": {
+        "knowledge_distillation": 5,
+        "lora_methods": 3,
+        "llm_systems": 5
+      },
+      "track": "distillation",
+      "prerequisites": [
+        "distill_lora_finetune"
+      ],
+      "unlocks": [
+        "distill_eval_compare"
+      ],
+      "milestone": "distillation_track",
+      "score": {
+        "impact": 3,
+        "depth": 3,
+        "reproducibility": 3
+      },
+      "compute_paths": [
+        "runpod",
+        "lambda_labs"
+      ]
+    },
+    {
+      "id": "distill_eval_compare",
+      "title": "Evaluate teacher vs student vs LoRA vs int8 on a held-out task",
+      "mode": "Profiling Lab",
+      "objective": "Build a small evaluation harness (perplexity on a held-out set, plus one downstream task from lm-evaluation-harness) and run it against the fp16 teacher, the int8 teacher, the LoRA-tuned teacher, and the distilled student. The point is the comparison, not the absolute number.",
+      "deliverable": "reports/distill_eval.md with a 4-row table (model, perplexity, downstream task score, peak memory) and 2-3 sentences on the trade-offs.",
+      "commands": [
+        "pip install -U lm-eval",
+        "lm_eval --model hf --model_args pretrained=Qwen/Qwen2.5-0.5B --tasks wikitext --batch_size 8"
+      ],
+      "skills": {
+        "knowledge_distillation": 3,
+        "quantization": 3,
+        "llm_systems": 5
+      },
+      "track": "distillation",
+      "prerequisites": [
+        "distill_teacher_student_train"
+      ],
+      "unlocks": [
+        "distill_int4_quant"
+      ],
+      "milestone": "distillation_track",
+      "score": {
+        "impact": 2,
+        "depth": 2,
+        "reproducibility": 4
+      },
+      "bottleneck_pick": true,
+      "compute_paths": [
+        "google_colab",
+        "runpod",
+        "lambda_labs"
+      ]
+    },
+    {
+      "id": "distill_int4_quant",
+      "title": "Int4 quantize the distilled student (GPTQ or AWQ)",
+      "mode": "GPU System Lab",
+      "objective": "Take the distilled student from the prior task and quantize it to int4 using GPTQ or AWQ. Measure latency, memory, and a tiny perplexity check. Compare against the int8 baseline.",
+      "deliverable": "notes/distill_int4.md with method (GPTQ / AWQ), latency, memory, perplexity, and a 1-paragraph note on where int4 starts to hurt.",
+      "commands": [
+        "pip install -U auto-gptq   # or: pip install -U awq"
+      ],
+      "skills": {
+        "quantization": 5,
+        "knowledge_distillation": 3
+      },
+      "track": "distillation",
+      "prerequisites": [
+        "distill_eval_compare"
+      ],
+      "unlocks": [
+        "distill_synthesis_report"
+      ],
+      "milestone": "distillation_track",
+      "score": {
+        "impact": 2,
+        "depth": 3,
+        "reproducibility": 3
+      },
+      "compute_paths": [
+        "google_colab",
+        "unsloth"
+      ]
+    },
+    {
+      "id": "distill_synthesis_report",
+      "title": "Distillation track synthesis: when does each method pay off?",
+      "mode": "Report Lab",
+      "objective": "Write the synthesis for the distillation track. Pull together the int8 baseline, the LoRA fine-tune, the teacher-student training, the eval comparison, and the int4 quant into a single report. The point is the trade-off map: when does LoRA win, when does distillation win, when does int4 hurt too much, and what is the cost on a real Linux box vs Colab.",
+      "deliverable": "reports/distill_synthesis.md with a 4-column trade-off table (method, cost-to-train, peak memory at inference, quality drop) and a 1-paragraph 'if you are on a Mac, do X' recommendation at the end.",
+      "skills": {
+        "knowledge_distillation": 3,
+        "quantization": 3,
+        "lora_methods": 3,
+        "llm_systems": 5
+      },
+      "track": "distillation",
+      "prerequisites": [
+        "distill_int4_quant"
+      ],
+      "unlocks": [],
+      "milestone": "distillation_track",
+      "score": {
+        "impact": 2,
+        "depth": 2,
+        "reproducibility": 3
+      },
+      "compute_paths": [
+        "google_colab",
+        "kaggle_notebooks",
+        "runpod"
+      ]
     }
   ],
   "tracks": {
@@ -1038,6 +1243,17 @@
       "domains": [
         "systems",
         "inference_serving"
+      ]
+    },
+    "distillation_track": {
+      "title": "Distillation & Compression - Week 5",
+      "tasks": [
+        "distill_quant_int8_baseline",
+        "distill_lora_finetune",
+        "distill_teacher_student_train",
+        "distill_eval_compare",
+        "distill_int4_quant",
+        "distill_synthesis_report"
       ]
     }
   }

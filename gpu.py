@@ -439,14 +439,15 @@ def render_walkthrough(roadmap: Dict[str, Any], storage: Dict[str, Any]) -> None
             title="Your first task",
             border_style="yellow",
         ))
-        # 'On Mac?' hint (v0.12, expanded v0.14). Fires when the next task
-        # is in a GPU-heavy track AND the milestone is past Week 1 (Triton,
-        # LLM, or systems - all of which need a Linux NVIDIA box for the
-        # full version). Suppressed for Week 1's commands-bearing tasks,
-        # which the user can attempt on a Mac and fall back to notes.
-        # v0.14 also points at `gpu resources --domain compute`, the
-        # per-task canonical command.
-        if (first.get("track") in {"cuda", "systems", "llm"}
+        # 'On Mac?' hint (v0.12, expanded v0.14, v0.15). Fires when the
+        # next task is in a GPU-heavy track AND the milestone is past
+        # Week 1 (Triton, LLM, systems, or distillation - all of which
+        # need a Linux NVIDIA box for the full version). Suppressed for
+        # Week 1's commands-bearing tasks, which the user can attempt
+        # on a Mac and fall back to notes. v0.14 also points at
+        # `gpu resources --domain compute`, the per-task canonical
+        # command.
+        if (first.get("track") in {"cuda", "systems", "llm", "distillation"}
                 and first.get("milestone") != "gpu_reality_check_week1"):
             console.print(
                 "[dim]On Mac? Most Week 2+ tasks need a Linux NVIDIA GPU box. "
@@ -607,8 +608,10 @@ def _end_of_curriculum_panel(roadmap: Dict[str, Any], completed: List[str]) -> P
     """
     nxt = _next_milestone_line(roadmap, completed or [])
     if nxt == "All milestones complete.":
+        n_tasks = len(roadmap.get("tasks") or [])
+        n_milestones = len(roadmap.get("milestones") or {})
         body = (
-            "All 26 tasks complete across the 4 milestones.\n"
+            f"All {n_tasks} tasks complete across the {n_milestones} milestones.\n"
             "Run `gpu score` for the program total or `gpu resources` for the next "
             "learning path."
         )
