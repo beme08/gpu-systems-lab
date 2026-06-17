@@ -568,6 +568,42 @@ def _next_milestone_line(roadmap: Dict[str, Any], completed: List[str]) -> str:
     return "All milestones complete."
 
 
+
+def _end_of_curriculum_panel(roadmap: Dict[str, Any], completed: List[str]) -> Panel:
+    """Panel shown by `done` and `start`/`next` when no successor task exists. v0.13.
+
+    - Mid-curriculum boundary (a milestone just finished, more remain): the
+      panel reads "Milestone boundary" and points to the next milestone via
+      the same `_next_milestone_line` helper that `status` and the walkthrough
+      already use. Border: cyan (transitional).
+    - Fully done (all milestones complete): the panel reads "Curriculum
+      complete" and shows a short end-of-program summary. Border: green.
+    """
+    nxt = _next_milestone_line(roadmap, completed or [])
+    if nxt == "All milestones complete.":
+        body = (
+            "All 26 tasks complete across the 4 milestones.\n"
+            "Run `gpu score` for the program total or `gpu resources` for the next "
+            "learning path."
+        )
+        return Panel(body, title="Curriculum complete", border_style="green")
+    last_id = (completed or [None])[-1]
+    if last_id is not None:
+        last_task = task_by_id(roadmap, last_id)
+        last_title = (last_task or {}).get("title", last_id) if last_task else last_id
+        body = (
+            f"Last task in this milestone: {last_title}\n"
+            f"{nxt}\n"
+            "Run `gpu next` to continue."
+        )
+    else:
+        body = (
+            f"{nxt}\n"
+            "Run `gpu next` to continue."
+        )
+    return Panel(body, title="Milestone boundary", border_style="cyan")
+
+
 # ----------------------------------------------------------------------------
 # Bottleneck prompt
 # ----------------------------------------------------------------------------
@@ -656,11 +692,7 @@ def start(
     if task:
         render_task(task)
     else:
-        console.print(Panel(
-            "Phase 1 complete. Now write and review gpu-week1-report.md.",
-            title="GPU Reality Check Complete",
-            border_style="green",
-        ))
+        console.print(_end_of_curriculum_panel(roadmap, data["completed"]))
 
 
 @app.command(name="next")
@@ -674,11 +706,7 @@ def cmd_next(
     if task:
         render_task(task)
     else:
-        console.print(Panel(
-            "Phase 1 complete. Now write and review gpu-week1-report.md.",
-            title="GPU Reality Check Complete",
-            border_style="green",
-        ))
+        console.print(_end_of_curriculum_panel(roadmap, data["completed"]))
 
 
 @app.command()
@@ -821,11 +849,7 @@ def done(
     if nxt:
         render_task(nxt)
     else:
-        console.print(Panel(
-            "Phase 1 complete. Now write and review gpu-week1-report.md.",
-            title="GPU Reality Check Complete",
-            border_style="green",
-        ))
+        console.print(_end_of_curriculum_panel(roadmap, data["completed"]))
 
 
 @app.command()
