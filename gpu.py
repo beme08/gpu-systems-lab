@@ -416,6 +416,17 @@ def render_walkthrough(roadmap: Dict[str, Any], storage: Dict[str, Any]) -> None
             title="Your first task",
             border_style="yellow",
         ))
+        # 'On Mac?' hint (v0.12). Fires when the next task is in a
+        # GPU-heavy track AND the milestone is past Week 1 (i.e. Triton,
+        # LLM serving, or systems work - all of which need a Linux NVIDIA
+        # box in practice). Suppressed for Week 1's commands-bearing tasks,
+        # which the user can attempt on a Mac and fall back to notes.
+        if (first.get("track") in {"cuda", "systems"}
+                and first.get("milestone") != "gpu_reality_check_week1"):
+            console.print(
+                "[dim]On Mac? Most Week 2+ tasks need a Linux NVIDIA GPU box. "
+                "Type `gpu compute` for platform guidance.[/dim]"
+            )
         render_task(first, is_current=True)
     else:
         console.print("[green]All tasks complete. Run `gpu score` to see the result.[/green]")
@@ -1016,6 +1027,58 @@ def resources(
             ", ".join(r.get("domains") or []),
             ", ".join(r.get("tags") or []),
             r.get("difficulty", ""),
+            r.get("url", ""),
+        )
+    console.print(table)
+
+
+@app.command()
+def compute(
+    open_id: Optional[str] = typer.Option(
+        None, "--open", help="Open the URL for a compute platform id in the default browser."
+    ),
+):
+    """Show where to run GPU tasks (compute platforms for the curriculum)."""
+    roadmap = load_roadmap()
+    items = [r for r in (roadmap.get("resources") or [])
+             if "compute" in (r.get("domains") or [])]
+
+    if open_id is not None:
+        match = next((r for r in items if r.get("id") == open_id), None)
+        if match is None:
+            console.print(f"[red]Unknown compute platform id: {open_id}[/red]")
+            raise typer.Exit(1)
+        url = match.get("url", "")
+        if not url:
+            console.print(f"[red]Compute platform {open_id} has no url.[/red]")
+            raise typer.Exit(1)
+        console.print(f"Opening [cyan]{url}[/cyan] in your default browser...")
+        webbrowser.open(url)
+        return
+
+    if not items:
+        console.print(
+            "[yellow]No compute platforms declared in the roadmap. "
+            "Add resources with domain=compute to see them here.[/yellow]"
+        )
+        return
+
+    console.print(
+        "[dim]On a Mac? Colab or Kaggle for the basics. "
+        "For Triton / vLLM / serving, rent a Linux GPU box (RunPod or Lambda Labs).[/dim]"
+    )
+    table = Table(title="Where to run GPU tasks", show_lines=False)
+    table.add_column("ID", style="cyan", no_wrap=True)
+    table.add_column("Title", style="bold")
+    table.add_column("Good for", style="green")
+    table.add_column("Not good for", style="red")
+    table.add_column("URL", style="blue", overflow="fold")
+    for r in items:
+        table.add_row(
+            r.get("id", ""),
+            r.get("title", ""),
+            r.get("good_for", ""),
+            r.get("not_good_for", ""),
             r.get("url", ""),
         )
     console.print(table)

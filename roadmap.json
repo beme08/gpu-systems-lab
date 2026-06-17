@@ -254,6 +254,527 @@
         "depth": 2,
         "reproducibility": 5
       }
+    },
+    {
+      "id": "triton_installed",
+      "title": "Install Triton and run a sanity check",
+      "mode": "GPU System Lab",
+      "objective": "Install Triton in a Python venv and run the bundled tutorial matmul kernel. Verify you can launch a Triton kernel on the available GPU.",
+      "commands": [
+        "python -m venv .venv-triton && source .venv-triton/bin/activate",
+        "pip install triton torch",
+        "python -c \"import triton; import triton.language as tl; print(triton.__version__)\""
+      ],
+      "deliverable": "notes/triton_setup.md with the installed Triton version, Python/PyTorch versions, and the GPU it ran on (or 'no NVIDIA GPU - documented what would have run').",
+      "skills": {
+        "cuda_execution_model": 5,
+        "kernel_design": 5
+      },
+      "track": "cuda",
+      "prerequisites": [
+        "week1_report"
+      ],
+      "unlocks": [
+        "triton_vector_add"
+      ],
+      "milestone": "triton_kernel_track",
+      "score": {
+        "impact": 2,
+        "depth": 2,
+        "reproducibility": 4
+      }
+    },
+    {
+      "id": "triton_vector_add",
+      "title": "First Triton kernel: vector add",
+      "mode": "CUDA Kernel Lab",
+      "objective": "Re-implement the Week 1 vector add as a Triton kernel. Compare line count and readability vs the raw CUDA version.",
+      "commands": [
+        "touch labs/vector_add/triton_vadd.py",
+        "python labs/vector_add/triton_vadd.py"
+      ],
+      "deliverable": "labs/vector_add/triton_vadd.py plus a 3-line note in reports/triton_vs_cuda.md comparing the two implementations.",
+      "skills": {
+        "kernel_design": 10,
+        "memory_hierarchy": 5,
+        "cuda_execution_model": 5
+      },
+      "track": "cuda",
+      "prerequisites": [
+        "triton_installed"
+      ],
+      "unlocks": [
+        "triton_matmul"
+      ],
+      "milestone": "triton_kernel_track",
+      "score": {
+        "impact": 3,
+        "depth": 3,
+        "reproducibility": 4
+      }
+    },
+    {
+      "id": "triton_matmul",
+      "title": "Triton matmul with autotune",
+      "mode": "CUDA Kernel Lab",
+      "objective": "Implement a block-tiled matmul in Triton and let autotune pick the best (BLOCK_M, BLOCK_N, BLOCK_K, num_stages) for your GPU.",
+      "commands": [
+        "touch labs/triton_matmul/matmul.py",
+        "python labs/triton_matmul/matmul.py"
+      ],
+      "deliverable": "labs/triton_matmul/matmul.py and a note with the autotuned config + measured TFLOPS at one problem size.",
+      "skills": {
+        "kernel_design": 10,
+        "memory_hierarchy": 5,
+        "cuda_execution_model": 5
+      },
+      "track": "cuda",
+      "prerequisites": [
+        "triton_vector_add"
+      ],
+      "unlocks": [
+        "triton_fused_softmax"
+      ],
+      "milestone": "triton_kernel_track",
+      "score": {
+        "impact": 4,
+        "depth": 4,
+        "reproducibility": 3
+      }
+    },
+    {
+      "id": "triton_fused_softmax",
+      "title": "Fused softmax: one kernel vs three",
+      "mode": "CUDA Kernel Lab",
+      "objective": "Write a single-pass online softmax in Triton. Compare it to a naive three-pass softmax (max, subtract, exp+normalize) on a large row.",
+      "commands": [
+        "touch labs/triton_softmax/softmax.py",
+        "python labs/triton_softmax/softmax.py"
+      ],
+      "deliverable": "labs/triton_softmax/softmax.py + a 5-line note on achieved bandwidth improvement.",
+      "skills": {
+        "kernel_design": 10,
+        "memory_hierarchy": 5
+      },
+      "track": "cuda",
+      "prerequisites": [
+        "triton_matmul"
+      ],
+      "unlocks": [
+        "triton_attention_draft"
+      ],
+      "milestone": "triton_kernel_track",
+      "score": {
+        "impact": 4,
+        "depth": 3,
+        "reproducibility": 3
+      }
+    },
+    {
+      "id": "triton_attention_draft",
+      "title": "Flash-attention-style kernel draft",
+      "mode": "CUDA Kernel Lab",
+      "constraint": "Memory Bandwidth Bottleneck",
+      "objective": "Draft a flash-attention-style block-tiled attention kernel. Goal is structure, not SOTA. Read the FlashAttention paper for the tiling idea.",
+      "commands": [
+        "touch labs/triton_attention/attention.py",
+        "python labs/triton_attention/attention.py"
+      ],
+      "deliverable": "labs/triton_attention/attention.py (working or partially working) + a 1-paragraph note on what the FlashAttention paper does that a naive attention does not.",
+      "skills": {
+        "kernel_design": 10,
+        "memory_hierarchy": 10,
+        "cuda_execution_model": 5
+      },
+      "bottleneck_pick": true,
+      "track": "cuda",
+      "prerequisites": [
+        "triton_fused_softmax"
+      ],
+      "unlocks": [
+        "triton_kernel_report"
+      ],
+      "milestone": "triton_kernel_track",
+      "score": {
+        "impact": 4,
+        "depth": 4,
+        "reproducibility": 2
+      }
+    },
+    {
+      "id": "triton_kernel_report",
+      "title": "Triton vs raw CUDA synthesis",
+      "mode": "Synthesis",
+      "objective": "Compare the Triton kernels from this week to the raw CUDA kernels from Week 1. Same workload, same machine. Note where Triton wins and where it loses.",
+      "commands": [
+        "touch reports/triton_vs_cuda.md"
+      ],
+      "deliverable": "reports/triton_vs_cuda.md with a table of (kernel, lines-of-code, achieved perf, complexity of writing) for the vector_add and matmul comparisons.",
+      "skills": {
+        "kernel_design": 5,
+        "cuda_execution_model": 5,
+        "pytorch_internals": 5
+      },
+      "track": "cuda",
+      "prerequisites": [
+        "triton_attention_draft"
+      ],
+      "unlocks": [
+        "llm_env_setup"
+      ],
+      "milestone": "triton_kernel_track",
+      "score": {
+        "impact": 3,
+        "depth": 3,
+        "reproducibility": 5
+      }
+    },
+    {
+      "id": "llm_env_setup",
+      "title": "Set up Python + transformers + a small model",
+      "mode": "GPU System Lab",
+      "objective": "Install transformers + a small open model (e.g. Qwen2.5-0.5B or SmolLM2-360M) and verify you can load and run a forward pass.",
+      "commands": [
+        "python -m venv .venv-llm && source .venv-llm/bin/activate",
+        "pip install transformers torch accelerate",
+        "python -c \"from transformers import AutoModelForCausalLM, AutoTokenizer; m = AutoModelForCausalLM.from_pretrained('Qwen/Qwen2.5-0.5B'); print(sum(p.numel() for p in m.parameters())/1e6, 'M params')\""
+      ],
+      "deliverable": "notes/llm_env.md with the model name, parameter count, device used (CPU / MPS / CUDA), and one sentence on what the model loaded successfully.",
+      "skills": {
+        "pytorch_internals": 5,
+        "llm_systems": 5
+      },
+      "track": "llm",
+      "prerequisites": [
+        "triton_kernel_report"
+      ],
+      "unlocks": [
+        "llm_first_generation"
+      ],
+      "milestone": "llm_inference_track",
+      "score": {
+        "impact": 2,
+        "depth": 2,
+        "reproducibility": 4
+      }
+    },
+    {
+      "id": "llm_first_generation",
+      "title": "First generation: measure latency",
+      "mode": "PyTorch Lab",
+      "constraint": "Latency bottleneck",
+      "objective": "Run a single text generation, measure time-to-first-token (TTFT) and inter-token latency. Note the device and batch size.",
+      "commands": [
+        "touch labs/llm_bench/first_gen.py",
+        "python labs/llm_bench/first_gen.py"
+      ],
+      "deliverable": "labs/llm_bench/first_gen.py + a 1-line note: 'TTFT=Xms, inter-token=Yms, device=Z'.",
+      "skills": {
+        "pytorch_internals": 5,
+        "profiling": 5,
+        "llm_systems": 10
+      },
+      "bottleneck_pick": true,
+      "track": "llm",
+      "prerequisites": [
+        "llm_env_setup"
+      ],
+      "unlocks": [
+        "llm_kv_cache_profiled"
+      ],
+      "milestone": "llm_inference_track",
+      "score": {
+        "impact": 3,
+        "depth": 3,
+        "reproducibility": 4
+      }
+    },
+    {
+      "id": "llm_kv_cache_profiled",
+      "title": "Profile prefill vs decode and watch KV cache grow",
+      "mode": "Profiling Lab",
+      "constraint": "Memory Bandwidth Bottleneck",
+      "objective": "Separate the prefill phase (processing the prompt) from the decode phase (one token at a time). Confirm the wall-clock asymmetry and watch the KV cache size scale with sequence length.",
+      "commands": [
+        "touch labs/llm_bench/prefill_decode.py",
+        "python labs/llm_bench/prefill_decode.py"
+      ],
+      "deliverable": "labs/llm_bench/prefill_decode.py + a short note: 'prefill=Xms for N prompt tokens, decode=Yms per token, KV cache=ZMB at seq_len=W'.",
+      "skills": {
+        "profiling": 10,
+        "memory_hierarchy": 10,
+        "llm_systems": 10
+      },
+      "bottleneck_pick": true,
+      "track": "llm",
+      "prerequisites": [
+        "llm_first_generation"
+      ],
+      "unlocks": [
+        "llm_batch_serving"
+      ],
+      "milestone": "llm_inference_track",
+      "score": {
+        "impact": 4,
+        "depth": 4,
+        "reproducibility": 3
+      }
+    },
+    {
+      "id": "llm_batch_serving",
+      "title": "Batched generation: throughput vs latency tradeoff",
+      "mode": "GPU System Lab",
+      "objective": "Send B=1, 4, 16, 64 sequences through the model in a single batch. Plot tokens/sec vs batch size and per-request latency.",
+      "commands": [
+        "touch labs/llm_bench/batch_sweep.py",
+        "python labs/llm_bench/batch_sweep.py"
+      ],
+      "deliverable": "labs/llm_bench/batch_sweep.py + a 3-line note on where throughput stops scaling (memory-bound? SM-bound?).",
+      "skills": {
+        "llm_systems": 10,
+        "memory_hierarchy": 5,
+        "profiling": 5
+      },
+      "reality_check": "At what batch size does throughput stop scaling? Why?",
+      "track": "llm",
+      "prerequisites": [
+        "llm_kv_cache_profiled"
+      ],
+      "unlocks": [
+        "llm_quantization_int8"
+      ],
+      "milestone": "llm_inference_track",
+      "score": {
+        "impact": 4,
+        "depth": 3,
+        "reproducibility": 3
+      }
+    },
+    {
+      "id": "llm_quantization_int8",
+      "title": "Int8 quantize a small model",
+      "mode": "GPU System Lab",
+      "objective": "Apply int8 weight quantization (bitsandbytes or torchao) to the same small model. Measure latency, peak memory, and a tiny qualitative check (a few prompts, eyeball the output).",
+      "commands": [
+        "touch labs/llm_bench/int8_quant.py",
+        "python labs/llm_bench/int8_quant.py"
+      ],
+      "deliverable": "labs/llm_bench/int8_quant.py + a 4-line note: latency delta, memory delta, qualitative output (pass/fail/almost).",
+      "skills": {
+        "llm_systems": 10,
+        "memory_hierarchy": 5,
+        "pytorch_internals": 5
+      },
+      "track": "llm",
+      "prerequisites": [
+        "llm_batch_serving"
+      ],
+      "unlocks": [
+        "llm_inference_report"
+      ],
+      "milestone": "llm_inference_track",
+      "score": {
+        "impact": 4,
+        "depth": 4,
+        "reproducibility": 3
+      }
+    },
+    {
+      "id": "llm_inference_report",
+      "title": "LLM inference synthesis",
+      "mode": "Synthesis",
+      "objective": "Synthesize this week's measurements into one report. Latency, memory, throughput, and what the bottleneck was at each scale.",
+      "commands": [
+        "touch reports/llm_inference_week3.md"
+      ],
+      "deliverable": "reports/llm_inference_week3.md with: prefill vs decode timing, KV cache growth curve, batch-sweep throughput curve, int8 quant tradeoffs.",
+      "skills": {
+        "llm_systems": 5,
+        "profiling": 5,
+        "pytorch_internals": 5
+      },
+      "track": "llm",
+      "prerequisites": [
+        "llm_quantization_int8"
+      ],
+      "unlocks": [
+        "serving_vllm_setup"
+      ],
+      "milestone": "llm_inference_track",
+      "score": {
+        "impact": 3,
+        "depth": 3,
+        "reproducibility": 5
+      }
+    },
+    {
+      "id": "serving_vllm_setup",
+      "title": "Install vLLM (or TGI) and bring up a server",
+      "mode": "GPU System Lab",
+      "objective": "Install a modern LLM serving engine (vLLM is the default pick). Start the OpenAI-compatible HTTP server and verify it responds.",
+      "commands": [
+        "pip install vllm",
+        "vllm serve Qwen/Qwen2.5-0.5B --port 8000"
+      ],
+      "deliverable": "notes/serving_setup.md with the serving engine, model, port, and the curl command you used to verify it.",
+      "skills": {
+        "llm_systems": 5,
+        "pytorch_internals": 5
+      },
+      "track": "systems",
+      "prerequisites": [
+        "llm_inference_report"
+      ],
+      "unlocks": [
+        "serving_first_request"
+      ],
+      "milestone": "gpu_serving_track",
+      "score": {
+        "impact": 2,
+        "depth": 2,
+        "reproducibility": 4
+      }
+    },
+    {
+      "id": "serving_first_request",
+      "title": "First HTTP request: TTFT under serving",
+      "mode": "GPU System Lab",
+      "objective": "Send a single HTTP request to the server. Measure TTFT and TPOT under serving. Compare to the raw transformers latency from Week 3.",
+      "commands": [
+        "curl -X POST http://localhost:8000/v1/chat/completions -H 'Content-Type: application/json' -d '{\"model\":\"Qwen/Qwen2.5-0.5B\",\"messages\":[{\"role\":\"user\",\"content\":\"Hello\"}],\"stream\":false}'"
+      ],
+      "deliverable": "notes/serving_first_request.md with TTFT/TPOT vs the Week 3 numbers. Was vLLM faster? By how much?",
+      "skills": {
+        "llm_systems": 10,
+        "profiling": 5
+      },
+      "reality_check": "Why does vLLM beat raw transformers on throughput even for a single request? (Hint: PagedAttention + continuous batching.)",
+      "track": "systems",
+      "prerequisites": [
+        "serving_vllm_setup"
+      ],
+      "unlocks": [
+        "serving_paged_attention"
+      ],
+      "milestone": "gpu_serving_track",
+      "score": {
+        "impact": 3,
+        "depth": 3,
+        "reproducibility": 4
+      }
+    },
+    {
+      "id": "serving_paged_attention",
+      "title": "Read the PagedAttention paper and the vLLM source",
+      "mode": "GPU System Lab",
+      "objective": "Read the vLLM paper (or the Kwon et al. SOSP'23 paper). Skim the vLLM source for the KV cache manager. Write 5 bullets connecting the paper to the code.",
+      "commands": [
+        "open https://arxiv.org/abs/2309.06180",
+        "git clone https://github.com/vllm-project/vllm.git"
+      ],
+      "deliverable": "notes/paged_attention_notes.md - 5 bullets, each with one paper claim and one code location that backs it.",
+      "skills": {
+        "llm_systems": 10,
+        "memory_hierarchy": 5
+      },
+      "track": "systems",
+      "prerequisites": [
+        "serving_first_request"
+      ],
+      "unlocks": [
+        "serving_streaming"
+      ],
+      "milestone": "gpu_serving_track",
+      "score": {
+        "impact": 4,
+        "depth": 4,
+        "reproducibility": 5
+      }
+    },
+    {
+      "id": "serving_streaming",
+      "title": "Streaming responses: TTFT vs TPOT tradeoff",
+      "mode": "GPU System Lab",
+      "constraint": "Sync vs streaming latency",
+      "objective": "Switch the request to stream=true. Measure TTFT (time to first SSE chunk) and TPOT (inter-chunk time). Note the difference.",
+      "commands": [
+        "curl -N -X POST http://localhost:8000/v1/chat/completions -H 'Content-Type: application/json' -d '{\"model\":\"Qwen/Qwen2.5-0.5B\",\"messages\":[{\"role\":\"user\",\"content\":\"Hello\"}],\"stream\":true}'"
+      ],
+      "deliverable": "notes/serving_streaming.md with TTFT and TPOT, and a 2-line note on why streaming improves perceived latency without reducing total time-to-last-token.",
+      "skills": {
+        "llm_systems": 10,
+        "profiling": 5
+      },
+      "bottleneck_pick": true,
+      "track": "systems",
+      "prerequisites": [
+        "serving_paged_attention"
+      ],
+      "unlocks": [
+        "serving_batching_under_load"
+      ],
+      "milestone": "gpu_serving_track",
+      "score": {
+        "impact": 3,
+        "depth": 3,
+        "reproducibility": 3
+      }
+    },
+    {
+      "id": "serving_batching_under_load",
+      "title": "Concurrent requests: watch continuous batching kick in",
+      "mode": "GPU System Lab",
+      "objective": "Send N=1, 4, 16, 64 concurrent requests with a small load tool. Watch throughput scale and per-request latency degrade. Confirm vLLM is continuous-batching (vs naive static batching).",
+      "commands": [
+        "pip install locust",
+        "touch labs/serving_load/loadtest.py",
+        "python labs/serving_load/loadtest.py --n 16"
+      ],
+      "deliverable": "labs/serving_load/loadtest.py + a note: 'at N=X concurrent requests, aggregate throughput peaked at Y tok/s, per-request p99 latency was Zms'.",
+      "skills": {
+        "llm_systems": 10,
+        "profiling": 5,
+        "memory_hierarchy": 5
+      },
+      "track": "systems",
+      "prerequisites": [
+        "serving_streaming"
+      ],
+      "unlocks": [
+        "serving_systems_report"
+      ],
+      "milestone": "gpu_serving_track",
+      "score": {
+        "impact": 4,
+        "depth": 3,
+        "reproducibility": 3
+      }
+    },
+    {
+      "id": "serving_systems_report",
+      "title": "GPU serving synthesis",
+      "mode": "Synthesis",
+      "objective": "Write the systems report: TTFT vs TPOT, streaming vs non-streaming, continuous batching at load, what the bottleneck was at each scale.",
+      "commands": [
+        "touch reports/gpu_serving_week4.md"
+      ],
+      "deliverable": "reports/gpu_serving_week4.md with: latency curves, throughput curves, a paragraph on what PagedAttention buys you, and one sentence on what would break at 1000 concurrent requests.",
+      "skills": {
+        "llm_systems": 5,
+        "profiling": 5,
+        "memory_hierarchy": 5
+      },
+      "track": "systems",
+      "prerequisites": [
+        "serving_batching_under_load"
+      ],
+      "unlocks": [],
+      "milestone": "gpu_serving_track",
+      "score": {
+        "impact": 3,
+        "depth": 3,
+        "reproducibility": 5
+      }
     }
   ],
   "tracks": {
@@ -291,6 +812,95 @@
         "performance"
       ],
       "difficulty": "advanced"
+    },
+    {
+      "id": "google_colab",
+      "title": "Google Colab",
+      "url": "https://colab.research.google.com/",
+      "domains": [
+        "compute"
+      ],
+      "tags": [
+        "free",
+        "notebook",
+        "nvidia-gpu",
+        "beginner-friendly"
+      ],
+      "difficulty": "beginner",
+      "good_for": "PyTorch, Transformers, small CUDA experiments, quick GPU time",
+      "not_good_for": "vLLM serving (long-running), anything needing persistent storage or >1 GPU",
+      "notes": "Use the GPU runtime. Free-tier availability varies; paid tier is reliable."
+    },
+    {
+      "id": "kaggle_notebooks",
+      "title": "Kaggle Notebooks",
+      "url": "https://www.kaggle.com/code",
+      "domains": [
+        "compute"
+      ],
+      "tags": [
+        "free",
+        "notebook",
+        "nvidia-gpu"
+      ],
+      "difficulty": "beginner",
+      "good_for": "Free notebook GPU, PyTorch, Transformers, small fine-tuning runs",
+      "not_good_for": "Anything needing internet at runtime, vLLM serving, anything that needs >1 GPU",
+      "notes": "30h/week free GPU. Internet/package install limits apply."
+    },
+    {
+      "id": "unsloth",
+      "title": "Unsloth",
+      "url": "https://unsloth.ai/",
+      "domains": [
+        "compute"
+      ],
+      "tags": [
+        "llm-finetuning",
+        "quantization",
+        "lora",
+        "colab-friendly"
+      ],
+      "difficulty": "intermediate",
+      "good_for": "LLM fine-tuning, LoRA, 4-bit / 8-bit quantization, runs in Colab",
+      "not_good_for": "Raw CUDA kernel work, anything that needs vLLM serving",
+      "notes": "Best fit for Week 3 quantization and any future distillation weeks. Not for Week 1/2 raw CUDA."
+    },
+    {
+      "id": "runpod",
+      "title": "RunPod",
+      "url": "https://www.runpod.io/",
+      "domains": [
+        "compute"
+      ],
+      "tags": [
+        "cloud-gpu",
+        "linux",
+        "jupyter",
+        "on-demand"
+      ],
+      "difficulty": "intermediate",
+      "good_for": "Triton, vLLM, real Linux NVIDIA environment, persistent dev box, on-demand pricing",
+      "not_good_for": "Anything that needs zero setup (you are spinning up a VM)",
+      "notes": "Best match for Week 2-4 full labs. Per-hour billing; Community Cloud is cheap."
+    },
+    {
+      "id": "lambda_labs",
+      "title": "Lambda Labs",
+      "url": "https://lambdalabs.com/",
+      "domains": [
+        "compute"
+      ],
+      "tags": [
+        "cloud-gpu",
+        "linux",
+        "multi-gpu",
+        "reserved"
+      ],
+      "difficulty": "advanced",
+      "good_for": "Persistent Linux GPU box, multi-GPU training, sustained workloads, full labs",
+      "not_good_for": "Anything you only need for an hour (use RunPod)",
+      "notes": "Reserved instances; per-month billing. Good when you know you want a real dev machine for a few weeks."
     }
   ],
   "milestones": {
@@ -309,6 +919,51 @@
       "domains": [
         "kernels",
         "evaluation"
+      ]
+    },
+    "triton_kernel_track": {
+      "title": "Triton Kernels - Week 2",
+      "tasks": [
+        "triton_installed",
+        "triton_vector_add",
+        "triton_matmul",
+        "triton_fused_softmax",
+        "triton_attention_draft",
+        "triton_kernel_report"
+      ],
+      "domains": [
+        "kernels",
+        "compilers"
+      ]
+    },
+    "llm_inference_track": {
+      "title": "LLM Inference - Week 3",
+      "tasks": [
+        "llm_env_setup",
+        "llm_first_generation",
+        "llm_kv_cache_profiled",
+        "llm_batch_serving",
+        "llm_quantization_int8",
+        "llm_inference_report"
+      ],
+      "domains": [
+        "llm_systems",
+        "evaluation"
+      ]
+    },
+    "gpu_serving_track": {
+      "title": "GPU Serving - Week 4",
+      "tasks": [
+        "serving_vllm_setup",
+        "serving_first_request",
+        "serving_paged_attention",
+        "serving_streaming",
+        "serving_batching_under_load",
+        "serving_systems_report"
+      ],
+      "domains": [
+        "systems",
+        "inference_serving"
       ]
     }
   }
