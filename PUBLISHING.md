@@ -16,7 +16,7 @@ When you are ready to publish, here is the short recipe.
 gh auth login
 
 # Create the repo and push in one step. Choose public or private.
-gh repo create fatmiresherifi/gpu-systems-lab \
+gh repo create beme08/gpu-systems-lab \
     --public \
     --source=. \
     --description "A terminal-based training loop for learning CUDA, GPU profiling, and AI systems engineering." \
