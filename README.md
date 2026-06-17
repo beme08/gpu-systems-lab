@@ -1,6 +1,7 @@
 # gpu-systems-lab
 
 > A terminal-based training loop for learning CUDA, GPU profiling, and AI systems engineering.
+> GitHub: <https://github.com/beme08/gpu-systems-lab>
 
 A local terminal program that walks you through a GPU systems roadmap:
 CUDA, Nsight, PyTorch benchmarking, bottleneck analysis, and later
