@@ -81,6 +81,11 @@ to actually execute the labs.
     └── gpu-week1-report.md  # final synthesis
 ```
 
+## Project links
+
+- [SECURITY.md](SECURITY.md) - how to report a vulnerability.
+- [CONTRIBUTING.md](CONTRIBUTING.md) - how to add a task, milestone, or resource.
+
 ## Build Order
 
 This project was built bottom-up so you can ship each version on its own:
