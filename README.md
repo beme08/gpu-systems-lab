@@ -41,7 +41,7 @@ Some tasks additionally require:
 |-------------------|---------|
 | `gpu start`    | First run: full walkthrough (welcome, what this is, shape, commands, first task). Later runs: quiet. |
 | `gpu next`     | Show the next pending task. |
-| `gpu status`   | Progress bar + current task + tracks + skill tree + a Pending panel (open reality checks, bottleneck classifications, benchmark opportunities) + a single Next-hint line. |
+| `gpu status`   | Progress bar + current task + tracks + skill tree + Pending panel + Next-hint line + Last-activity line + Next-milestone line. |
 | `gpu skills`   | Skill tree only. |
 | `gpu done <id> [--bench <path>]` | Mark task complete (prompts for bottleneck / reality check when needed; attach a benchmark artifact with `--bench`). |
 | `gpu resources` | List roadmap resources (papers, libraries, tools), with `--domain`, `--tag`, `--difficulty` filters and `--open <id>`. |
@@ -94,6 +94,8 @@ This project was built bottom-up so you can ship each version on its own:
 | v0.7 | DAG-ready schema + scoring metadata + `resources` + `gpu` alias | done |
 | v0.8 | Benchmark logging (file + summary) + `gpu resources` + `gpu score` panel | done |
 | v0.9 | First-run walkthrough: welcome + design philosophy + program shape + commands + first task | done |
+| v0.10 | Surgical hint pass: 'When done' preview on task cards, Pending panel + Next hint in `status`, re-run detection on `done`, unknown-id tip | done |
+| v0.11 | Timestamps (`completed_at`) + 'Last activity' line in `status` + reality-check prompt scaffold + 'Next milestone' line + `gpu done <completed>` tip | done |
 
 ## Tracks
 

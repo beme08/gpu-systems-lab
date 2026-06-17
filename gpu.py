@@ -74,6 +74,7 @@ def default_storage(roadmap: Dict[str, Any]) -> Dict[str, Any]:
         "reality": {},       # task_id -> user's written answer
         "benchmarks": {},    # task_id -> {path, summary, recorded_at}
         "welcomed": False,   # True once gpu start has shown the first-run walkthrough
+        "completed_at": {},  # task_id -> ISO 8601 UTC string ("when was this task done")
     }
 
 
@@ -118,6 +119,7 @@ def load_storage() -> Dict[str, Any]:
     for key in ("completed", "bottlenecks", "reality", "benchmarks"):
         data.setdefault(key, {} if key != "completed" else [])
     data.setdefault("welcomed", False)
+    data.setdefault("completed_at", {})
     return data
 
 
@@ -397,6 +399,11 @@ def render_walkthrough(roadmap: Dict[str, Any], storage: Dict[str, Any]) -> None
     cmds.add_row("gpu reset",   "wipe all progress (asks first)")
     console.print(Panel(cmds, title="Commands you will use", border_style="blue"))
 
+    # 4b. Next milestone (v0.11). One line, derived from roadmap + storage.
+    console.print(
+        f"[bold magenta]{_next_milestone_line(roadmap, storage.get('completed') or [])}[/bold magenta]"
+    )
+
     # 5. First task
     first = next_task(tasks, storage.get("completed") or [])
     if first is not None:
@@ -501,6 +508,55 @@ def _next_hint(roadmap: Dict[str, Any], data: Dict[str, Any]) -> str:
     return "`gpu score` to see the final result"
 
 
+def _format_relative(then: datetime, now: datetime) -> str:
+    """Render a human 'Xh ago' / 'Xd ago' / 'just now' string."""
+    delta = now - then
+    seconds = int(delta.total_seconds())
+    if seconds < 60:
+        return "just now"
+    if seconds < 3600:
+        return f"{seconds // 60}m ago"
+    if seconds < 86400:
+        return f"{seconds // 3600}h ago"
+    return f"{seconds // 86400}d ago"
+
+
+def _last_activity_line(data: Dict[str, Any]) -> str:
+    """Single-line 'Last activity: ...' for the status panel. v0.11."""
+    completed_at = data.get("completed_at") or {}
+    if not completed_at:
+        return "Last activity: never"
+    # Find the most recent entry by timestamp; tolerate malformed values.
+    best_id = None
+    best_dt = None
+    for tid, ts in completed_at.items():
+        try:
+            dt = datetime.fromisoformat(ts)
+        except (TypeError, ValueError):
+            continue
+        if best_dt is None or dt > best_dt:
+            best_dt = dt
+            best_id = tid
+    if best_dt is None:
+        return "Last activity: unknown"
+    return f"Last activity: {_format_relative(best_dt, datetime.now(timezone.utc))} ({best_id})"
+
+
+def _next_milestone_line(roadmap: Dict[str, Any], completed: List[str]) -> str:
+    """Single-line 'Next milestone: ...' for the walkthrough and status. v0.11."""
+    completed_set = set(completed or [])
+    milestones = roadmap.get("milestones") or {}
+    for mid, m in milestones.items():
+        ids = m.get("tasks") or []
+        if not ids:
+            continue
+        done = sum(1 for tid in ids if tid in completed_set)
+        if done < len(ids):
+            title = m.get("title", mid)
+            return f"Next milestone: {title} ({done}/{len(ids)} tasks)"
+    return "All milestones complete."
+
+
 # ----------------------------------------------------------------------------
 # Bottleneck prompt
 # ----------------------------------------------------------------------------
@@ -538,6 +594,14 @@ def prompt_reality(task: Dict[str, Any]) -> str:
         title="Reality Check",
         border_style="magenta",
     ))
+    console.print(
+        "[dim]A good answer: ~2 sentences, names the bottleneck or principle, "
+        "gives a number when you can.[/dim]",
+    )
+    console.print(
+        "[dim]Example: 'Vector add is memory-bound because each thread reads "
+        "2 + writes 1 element, but only does 1 FLOP.'[/dim]",
+    )
     console.print("(type 'skip' to leave blank)")
     ans = typer.prompt("Your answer")
     return ans.strip()
@@ -622,6 +686,8 @@ def status(
     render_skill_tree(roadmap.get("skills", []), data.get("skills", {}))
     _render_pending(roadmap, data)
     console.print(f"[bold cyan]Next:[/bold cyan] {_next_hint(roadmap, data)}")
+    console.print(f"[dim]{_last_activity_line(data)}[/dim]")
+    console.print(f"[bold magenta]{_next_milestone_line(roadmap, data['completed'])}[/bold magenta]")
 
 
 @app.command()
@@ -660,6 +726,11 @@ def done(
 
     if task_id in data["completed"]:
         console.print(f"[yellow]Task {task_id} is already complete.[/yellow]")
+        typer.echo(
+            f"Tip: `gpu explain --id {task_id}` to see the recorded "
+            f"bottleneck / reality / benchmark.",
+            err=True,
+        )
         return
 
     # Re-run detection (v0.10). The user is starting `gpu done` for a task
@@ -696,6 +767,7 @@ def done(
             data["reality"][task_id] = ans
 
     data["completed"].append(task_id)
+    data["completed_at"][task_id] = datetime.now(timezone.utc).isoformat(timespec="seconds")
 
     for skill, points in (task.get("skills") or {}).items():
         current = data["skills"].get(skill, 0)
