@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import json
 import os
+import re as _re
 import sys
 import webbrowser
 from datetime import datetime, timezone
@@ -689,24 +690,71 @@ def prompt_reality(task: Dict[str, Any]) -> str:
 # Teaching prompts (v0.16)
 # ----------------------------------------------------------------------------
 
-def give_teaching_feedback(answer: str, prompt: Dict[str, Any]) -> str:
-    """Hand-coded feedback for a teaching answer. v0.16.
+def _pattern_in(pattern: str, answer_lower: str) -> bool:
+    """Case-insensitive regex search. Returns True on first match.
 
-    Counts how many of the prompt's `expected_keywords` (case-insensitive,
-    whole-word) appear in the answer. 2+ hits -> "match" -> return
-    `follow_up_if_match`. 0-1 hits -> "miss" -> return `follow_up_if_miss`.
-    No LLM call. v0.17 is the conversation about whether to add one.
+    Compiles each pattern fresh; the call sites pass small lists (1-3
+    entries) so this is fine. If the pattern is malformed, returns
+    False and lets the caller fall through to the next check.
     """
-    kws = [str(k).lower() for k in (prompt.get("expected_keywords") or [])]
+    try:
+        return _re.search(pattern, answer_lower, _re.IGNORECASE) is not None
+    except _re.error:
+        return False
+
+
+def give_teaching_feedback(answer: str, prompt: Dict[str, Any]) -> str:
+    """Hand-coded feedback for a teaching answer. v0.16 + v0.18.
+
+    v0.18 layered feedback: the more specific the rule that fires, the
+    better the feedback. Order is:
+
+      1. common_misconceptions (regex match) -> specific "not quite" line.
+         This fires BEFORE the keyword check because a common wrong answer
+         is more useful to call out than a generic miss.
+      2. expected_answers (regex match, in order) -> first matching response.
+         A specific "right - the bottleneck is X" line.
+      3. expected_keywords (substring match, count >= 2) -> follow_up_if_match.
+         The v0.16 fallback. Kept as-is for backward compatibility.
+      4. No match -> follow_up_if_miss, or a "Consider: <keywords>" line
+         built from the expected_keywords list.
+
+    The hand-coded fallback is what `gpu teach` always uses; the LLM
+    path (`--llm`) is additive, see ask_llm_feedback.
+    """
     ans = (answer or "").lower()
+
+    # 1. Common misconceptions (specific "wrong answer" feedback).
+    for entry in (prompt.get("common_misconceptions") or []):
+        if isinstance(entry, dict) and _pattern_in(entry.get("pattern", ""), ans):
+            return entry.get("response") or "Not quite."
+
+    # 2. Expected answers (specific "right answer" feedback, in order).
+    for entry in (prompt.get("expected_answers") or []):
+        if isinstance(entry, dict) and _pattern_in(entry.get("pattern", ""), ans):
+            return entry.get("response") or "Good."
+
+    # 3. Keyword count (v0.16 fallback).
+    kws = [str(k).lower() for k in (prompt.get("expected_keywords") or [])]
     hits = sum(1 for k in kws if k and k in ans)
     if hits >= 2:
         return prompt.get("follow_up_if_match") or "Good."
+
+    # 4. Miss fallback.
     return prompt.get("follow_up_if_miss") or "Consider: " + ", ".join(kws[:3]) + "."
 
 
-def ask_llm_feedback(answer: str, question: str, api_key: str) -> Optional[str]:
-    """Optional LLM-generated feedback for a teaching answer. v0.17.
+# `re` is the stdlib module; aliased as _re at the top of gpu.py to avoid
+# shadowing by any future import. The helper above uses _re explicitly.
+
+
+def ask_llm_feedback(
+    answer: str,
+    question: str,
+    api_key: str,
+    task_context: Optional[Dict[str, str]] = None,
+) -> Optional[str]:
+    """Optional LLM-generated feedback for a teaching answer. v0.17 + v0.18.
 
     Calls the OpenAI Chat Completions API (gpt-4o-mini by default) over
     HTTPS using stdlib only (no `openai` SDK, no subprocess). Returns
@@ -714,8 +762,13 @@ def ask_llm_feedback(answer: str, question: str, api_key: str) -> Optional[str]:
     treat None as 'LLM unavailable' and fall back to the hand-coded
     feedback; this function never raises.
 
-    Cost guard: max 200 tokens per call. Time guard: 8s timeout. Both are
-    conservative; the use case is a short feedback line, not a long essay.
+    v0.18: `task_context` is an optional dict with keys "objective" and
+    "deliverable" (and optionally "title"). When supplied, the system
+    prompt is enriched with the task context so the LLM feedback is
+    anchored to the specific task instead of being generic. The system
+    prompt cap keeps the total under ~600 tokens to stay cheap.
+
+    Cost guard: max 200 tokens per call. Time guard: 8s timeout.
     """
     if not api_key:
         return None
@@ -723,16 +776,27 @@ def ask_llm_feedback(answer: str, question: str, api_key: str) -> Optional[str]:
         import json as _json
         import urllib.request
         import urllib.error
+        system = (
+            "You are a brief, encouraging tutor for a GPU systems engineering learner. "
+            "Given the question and the user's answer, give 1-2 sentences of feedback. "
+            "If the answer is right, affirm it. If it misses, name the key idea they should "
+            "add. No preamble, no bullet points, no markdown."
+        )
+        if task_context:
+            ctx_parts = []
+            if task_context.get("title"):
+                ctx_parts.append(f"Task: {task_context['title']}")
+            if task_context.get("objective"):
+                ctx_parts.append(f"Objective: {task_context['objective']}")
+            if task_context.get("deliverable"):
+                ctx_parts.append(f"Deliverable: {task_context['deliverable']}")
+            if ctx_parts:
+                system = system + " " + " | ".join(ctx_parts)
         body = _json.dumps({
             "model": "gpt-4o-mini",
             "max_tokens": 200,
             "messages": [
-                {"role": "system", "content": (
-                    "You are a brief, encouraging tutor for a GPU systems engineering learner. "
-                    "Given the question and the user's answer, give 1-2 sentences of feedback. "
-                    "If the answer is right, affirm it. If it misses, name the key idea they should "
-                    "add. No preamble, no bullet points, no markdown."
-                )},
+                {"role": "system", "content": system},
                 {"role": "user", "content": f"Question: {question}\n\nAnswer: {answer}"},
             ],
         }).encode("utf-8")
@@ -797,7 +861,18 @@ def prompt_teaching(
     feedback = "" if ans.lower() == "skip" else give_teaching_feedback(ans, p)
     llm_feedback = None
     if use_llm and ans.lower() != "skip":
-        llm_feedback = ask_llm_feedback(ans, p["question"], os.environ.get("OPENAI_API_KEY", ""))
+        task_context = None
+        if isinstance(task, dict):
+            task_context = {
+                k: task.get(k) for k in ("title", "objective", "deliverable")
+                if task.get(k)
+            }
+        llm_feedback = ask_llm_feedback(
+            ans,
+            p["question"],
+            os.environ.get("OPENAI_API_KEY", ""),
+            task_context=task_context,
+        )
     record = {
         "question": p["question"],
         "answer": ans,

@@ -164,6 +164,22 @@
             "element",
             "flop"
           ],
+          "expected_answers": [
+            {
+              "pattern": "memory.*bandwidth|bandwidth.*memory|memory bound|read.*write|bytes.*flop|flop.*byte",
+              "response": "Right - the bottleneck is bytes-per-flop. Vector add does ~1 FLOP per element but 2 memory accesses, so it spends most of its time waiting on the GPU's memory subsystem, not the compute units."
+            },
+            {
+              "pattern": "\\bsm\\b|\\bsm_count\\b|\\boccupancy\\b|\\bkernel launch",
+              "response": "Occupancy and launch overhead matter, but the dominant reason vector add is memory-bound is bytes-per-flop. Compute utilization is typically <10% on a real card."
+            }
+          ],
+          "common_misconceptions": [
+            {
+              "pattern": "compute.?(bound|heavy|intensive)|gpu.*(parallel|fast)|many.*core",
+              "response": "Not quite - the GPU has many cores, but vector add does not use them. Each element does ~1 FLOP, so even with thousands of SMs running, the bottleneck is the memory bus, not compute."
+            }
+          ],
           "follow_up_if_match": "Good. Now: how would you change the kernel to be compute-bound instead? (one sentence is fine)",
           "follow_up_if_miss": "Hint: think about the ratio of bytes read+written to FLOPs performed. A 1:1 element-wise op usually does very few FLOPs per element."
         },

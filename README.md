@@ -110,6 +110,7 @@ This project was built bottom-up so you can ship each version on its own:
 | v0.15 | Distillation track (6 Week 5+ tasks: int8 PTQ, LoRA, teacher-student KD, eval comparison, int4 quant, synthesis) + 3 new skills + 5th milestone | done |
 | v0.16 | Interactive teaching primitives: `teaching_prompts` field on tasks + `gpu teach <id>` command + hand-coded keyword feedback + teaching log in `gpu explain` (Candidate C from issue #2) | done |
 | v0.17 | Optional LLM feedback via `gpu teach --llm` (OPENAI_API_KEY-gated, stdlib-only) + `teaching_prompts` on `ncu_profile` + pre-commit hook email-regex tightening (fixes the v0.12.2 `company.com` allowlist leak and the `@app.command` false positive) | done |
+| v0.18 | Layered teaching feedback: `common_misconceptions` (regex) + `expected_answers` (regex) layered on top of the v0.16 `expected_keywords` substring check; LLM system prompt enriched with task `objective` + `deliverable` (Candidate A from issue #3) | done |
 
 ## Tracks
 

@@ -54,16 +54,52 @@ feedback via `give_teaching_feedback`, and appends the record to
 `gpu explain --id <id>`. Tasks without `teaching_prompts` are
 unaffected.
 
-Hand-coded feedback in v0.16; v0.17 added an optional LLM
-feedback path gated on `OPENAI_API_KEY`. The user runs
-`gpu teach <id> --llm` to get an LLM-generated feedback line in
-addition to the hand-coded one. The LLM call uses stdlib (urllib)
-only - no `openai` SDK, no subprocess. The LLM path is additive
-and never blocking: if the env var is missing or the API call
-fails, the hand-coded feedback still records and the command
-exits 0. The LLM feedback is stored as `llm_feedback` on the
-teaching record and rendered as a 5th column in `gpu explain
---id <id>`.
+Hand-coded feedback in v0.16, richer layered feedback in v0.18,
+optional LLM feedback in v0.17.
+
+v0.18 layered feedback (in `give_teaching_feedback`):
+
+  1. `common_misconceptions` (regex match) -> specific "not quite" line.
+  2. `expected_answers` (regex match, in order) -> first matching response.
+  3. `expected_keywords` (substring count >= 2) -> `follow_up_if_match`.
+  4. No match -> `follow_up_if_miss`, or a "Consider: <keywords>" line.
+
+The more specific the rule that fires, the better the feedback.
+Misconceptions fire BEFORE keyword counts because a common wrong
+answer is more useful to call out than a generic miss. Both new
+fields are optional and backward-compatible: a prompt with only
+`expected_keywords` behaves exactly like v0.16.
+
+Example v0.18 prompt:
+
+```json
+{
+  "question": "Why is vector add usually memory-bound?",
+  "expected_keywords": ["memory", "bandwidth"],
+  "expected_answers": [
+    {"pattern": "memory.*bandwidth|read.*write",
+     "response": "Right - the bottleneck is bytes-per-flop."}
+  ],
+  "common_misconceptions": [
+    {"pattern": "compute.?(bound|heavy)",
+     "response": "Not quite - vector add does ~1 FLOP per element."}
+  ],
+  "follow_up_if_match": "Good. Now: how would you change the kernel?",
+  "follow_up_if_miss": "Hint: think about bytes-per-flop."
+}
+```
+
+v0.17 LLM feedback (additive, never blocking):
+
+`gpu teach <id> --llm` adds an LLM-generated feedback line in
+addition to the hand-coded one. v0.18 enriches the LLM system
+prompt with the task's `objective` and `deliverable` so the
+feedback is anchored to the specific task, not generic. The LLM
+call uses stdlib (urllib) only - no `openai` SDK, no subprocess.
+If `OPENAI_API_KEY` is missing or the API call fails, the
+hand-coded feedback still records and the command exits 0. The
+LLM feedback is stored as `llm_feedback` on the teaching record
+and rendered as a 5th column in `gpu explain --id <id>`.
 ```
 
 Only `id`, `milestone`, `track`, `title`, `objective`, `constraint`,
