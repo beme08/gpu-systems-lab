@@ -77,6 +77,7 @@ def default_storage(roadmap: Dict[str, Any]) -> Dict[str, Any]:
         "welcomed": False,   # True once gpu start has shown the first-run walkthrough
         "completed_at": {},  # task_id -> ISO 8601 UTC string ("when was this task done")
         "teaching": {},      # task_id -> list of {question, answer, feedback, asked_at} (v0.16)
+        "llm_cache": {},     # "task_id|prompt_index|answer_norm" -> {model, text, cached_at} (v0.20)
     }
 
 
@@ -123,6 +124,7 @@ def load_storage() -> Dict[str, Any]:
     data.setdefault("welcomed", False)
     data.setdefault("completed_at", {})
     data.setdefault("teaching", {})
+    data.setdefault("llm_cache", {})
     return data
 
 
@@ -748,11 +750,34 @@ def give_teaching_feedback(answer: str, prompt: Dict[str, Any]) -> str:
 # shadowing by any future import. The helper above uses _re explicitly.
 
 
+# v0.20: model allowlist for the optional --llm feedback path. Users pick
+# via the GPU_LLM_MODEL env var; default is gpt-4o-mini (cheapest of the
+# known-good set). The allowlist keeps typos from silently burning credits
+# on a non-existent model.
+LLM_ALLOWED_MODELS = {
+    "gpt-4o-mini":  "cheapest, default",
+    "gpt-4o":       "higher quality, ~15x cost",
+    "gpt-4.1-mini": "newest mini, good middle ground",
+    "gpt-4.1":      "newest full, most expensive",
+}
+
+
+def _llm_cache_key(task_id: str, prompt_index: int, answer: str) -> str:
+    """Stable cache key. `answer` is normalized (lowercased, stripped)."""
+    norm = (answer or "").strip().lower()
+    return f"{task_id}|{prompt_index}|{norm}"
+
+
 def ask_llm_feedback(
     answer: str,
     question: str,
     api_key: str,
     task_context: Optional[Dict[str, str]] = None,
+    model: Optional[str] = None,
+    stream_cb: Optional[Any] = None,
+    cache: Optional[Dict[str, Any]] = None,
+    task_id: Optional[str] = None,
+    prompt_index: Optional[int] = None,
 ) -> Optional[str]:
     """Optional LLM-generated feedback for a teaching answer. v0.17 + v0.18.
 
@@ -769,9 +794,43 @@ def ask_llm_feedback(
     prompt cap keeps the total under ~600 tokens to stay cheap.
 
     Cost guard: max 200 tokens per call. Time guard: 8s timeout.
+
+    v0.20 additions:
+      - `model` selects the OpenAI model; falls back to GPU_LLM_MODEL
+        env var, then "gpt-4o-mini". Unknown models fall back to the
+        default silently (avoids burning credits on a typo).
+      - `stream_cb(token)` is called for each streamed delta when the
+        API is called in streaming mode. The assembled text is still
+        returned. If `stream_cb` is None, the request is non-streaming
+        (matches v0.17/v0.18 behavior).
+      - `cache` is an optional dict-like (storage.llm_cache). If a key
+        is hit, the cached text is returned without an API call. The
+        env var GPU_LLM_NO_CACHE=1 disables lookup + store.
+      - `task_id` + `prompt_index` identify the cache key when `cache`
+        is supplied. Both are required to read or write the cache.
     """
     if not api_key:
         return None
+
+    # --- v0.20: resolve model from arg > env > default, validated against allowlist.
+    chosen = model or os.environ.get("GPU_LLM_MODEL", "") or "gpt-4o-mini"
+    if chosen not in LLM_ALLOWED_MODELS:
+        chosen = "gpt-4o-mini"
+
+    # --- v0.20: cache lookup (unless bypassed).
+    use_cache = (
+        cache is not None
+        and task_id is not None
+        and prompt_index is not None
+        and os.environ.get("GPU_LLM_NO_CACHE", "") != "1"
+    )
+    cache_key = None
+    if use_cache:
+        cache_key = _llm_cache_key(task_id, prompt_index, answer)
+        hit = cache.get(cache_key)
+        if hit and hit.get("text"):
+            return hit["text"]
+
     try:
         import json as _json
         import urllib.request
@@ -793,8 +852,9 @@ def ask_llm_feedback(
             if ctx_parts:
                 system = system + " " + " | ".join(ctx_parts)
         body = _json.dumps({
-            "model": "gpt-4o-mini",
+            "model": chosen,
             "max_tokens": 200,
+            "stream": bool(stream_cb),
             "messages": [
                 {"role": "system", "content": system},
                 {"role": "user", "content": f"Question: {question}\n\nAnswer: {answer}"},
@@ -808,15 +868,53 @@ def ask_llm_feedback(
                 "Content-Type": "application/json",
             },
         )
+        if stream_cb:
+            text_parts: list = []
+            with urllib.request.urlopen(req, timeout=8) as resp:
+                for raw in resp:
+                    line = raw.decode("utf-8", errors="replace").rstrip("\n").rstrip()
+                    if not line.startswith("data:"):
+                        continue
+                    payload_s = line[len("data:"):].strip()
+                    if payload_s == "[DONE]":
+                        break
+                    try:
+                        evt = _json.loads(payload_s)
+                    except ValueError:
+                        continue
+                    for ch in evt.get("choices") or []:
+                        delta = (ch.get("delta") or {}).get("content")
+                        if delta:
+                            text_parts.append(delta)
+                            try:
+                                stream_cb(delta)
+                            except Exception:
+                                pass
+            assembled = "".join(text_parts).strip()
+            if not assembled:
+                return None
+            if use_cache and cache_key is not None:
+                cache[cache_key] = {
+                    "model": chosen,
+                    "text": assembled,
+                    "cached_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+                }
+            return assembled
         with urllib.request.urlopen(req, timeout=8) as resp:
             payload = _json.loads(resp.read().decode("utf-8"))
         choices = payload.get("choices") or []
         if not choices:
             return None
         msg = (choices[0].get("message") or {}).get("content") or ""
-        return msg.strip() or None
+        msg = msg.strip() or None
+        if msg and use_cache and cache_key is not None:
+            cache[cache_key] = {
+                "model": chosen,
+                "text": msg,
+                "cached_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+            }
+        return msg
     except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError, ValueError, KeyError, OSError):
-        # Any failure: fall back to hand-coded. Never raise.
         return None
 
 
@@ -826,6 +924,7 @@ def prompt_teaching(
     task_id: str,
     index: int = 0,
     use_llm: bool = False,
+    stream_cb: Optional[Any] = None,
 ) -> None:
     """Run ONE step of the multi-step teaching flow for a task. v0.16 + v0.17.
 
@@ -859,6 +958,11 @@ def prompt_teaching(
     except (typer.Abort, EOFError, KeyboardInterrupt):
         ans = "skip"
     feedback = "" if ans.lower() == "skip" else give_teaching_feedback(ans, p)
+    # v0.20: print hand-coded feedback BEFORE the LLM call. The LLM
+    # call (especially with streaming) takes a moment, and the user
+    # should see the deterministic feedback first.
+    if feedback:
+        console.print(f"[blue]Feedback:[/blue] {feedback}")
     llm_feedback = None
     if use_llm and ans.lower() != "skip":
         task_context = None
@@ -872,6 +976,10 @@ def prompt_teaching(
             p["question"],
             os.environ.get("OPENAI_API_KEY", ""),
             task_context=task_context,
+            stream_cb=stream_cb,
+            cache=data.get("llm_cache") if isinstance(data, dict) else None,
+            task_id=task_id,
+            prompt_index=index,
         )
     record = {
         "question": p["question"],
@@ -882,10 +990,23 @@ def prompt_teaching(
     if llm_feedback is not None:
         record["llm_feedback"] = llm_feedback
     data.setdefault("teaching", {}).setdefault(task_id, []).append(record)
-    if feedback:
-        console.print(f"[blue]Feedback:[/blue] {feedback}")
     if llm_feedback:
-        console.print(f"[magenta]LLM feedback:[/magenta] {llm_feedback}")
+        # v0.20: stream_cb path already printed tokens, skip duplication.
+        if stream_cb is not None:
+            return
+        # v0.20: tag the LLM feedback line as cached / fresh / live.
+        cache_dict = data.get("llm_cache") if isinstance(data, dict) else None
+        cache_key = _llm_cache_key(task_id, index, ans) if cache_dict is not None else None
+        if cache_key and cache_dict.get(cache_key, {}).get("text") == llm_feedback:
+            tag = "[dim](cached)[/dim]"
+        elif cache_key and cache_key in cache_dict and \
+                cache_dict[cache_key].get("cached_at", "").startswith(
+                    datetime.now(timezone.utc).isoformat(timespec="seconds")[:14]
+                ):
+            tag = "[dim](fresh)[/dim]"
+        else:
+            tag = "[dim](live)[/dim]"
+        console.print(f"[magenta]LLM feedback:[/magenta] {llm_feedback} {tag}")
 
 
 # ----------------------------------------------------------------------------
@@ -1289,6 +1410,16 @@ def teach(
     API call fails, the hand-coded feedback still records and the command
     exits 0; the LLM path is additive, never blocking.
 
+    v0.20 additions:
+      - Set GPU_LLM_MODEL to pick from a 4-model allowlist
+        (gpt-4o-mini, gpt-4o, gpt-4.1-mini, gpt-4.1). Default gpt-4o-mini.
+        Unknown values fall back to the default silently.
+      - Responses are cached in storage.llm_cache. Repeated calls with
+        the same (task_id, prompt_index, answer) do not re-bill OpenAI.
+        Set GPU_LLM_NO_CACHE=1 to bypass.
+      - Fresh LLM responses are streamed token-by-token; cache hits
+        print a single line with a (cached) / (fresh) / (live) tag.
+
     Tasks without a `teaching_prompts` field are a no-op with a clear message.
     """
     roadmap = load_roadmap()
@@ -1336,7 +1467,40 @@ def teach(
         already = len(data.get("teaching", {}).get(task_id, []))
         if already > i:
             continue
-        prompt_teaching(task, data, task_id, i, use_llm=llm)
+        # v0.20: stream tokens when --llm is on AND the cache will miss.
+        # If the cache will hit, we let prompt_teaching print the (cached)
+        # tag line via the standard post-call path (no streaming).
+        stream_cb = None
+        if llm and os.environ.get("OPENAI_API_KEY"):
+            cache_dict = data.get("llm_cache", {}) if isinstance(data, dict) else {}
+            # We don't know the user's answer yet (prompt_teaching asks),
+            # so we can't pre-compute the cache key. Default to streaming
+            # for fresh answers; prompt_teaching will short-circuit on
+            # cache hit and skip the post-call line if stream_cb is set.
+            # To still show a (cached) tag for hits, the teach command
+            # checks the latest record after the call and prints the
+            # cached line if no streaming happened.
+            streamed = {"on": False}
+            def _stream_cb(token: str, _s=streamed) -> None:
+                if not _s["on"]:
+                    console.print("[magenta]LLM feedback:[/magenta] ", end="")
+                    _s["on"] = True
+                console.print(token, end="", highlight=False)
+            stream_cb = _stream_cb
+        if stream_cb is not None:
+            console.print()  # spacer before the streaming line
+        prompt_teaching(task, data, task_id, i, use_llm=llm, stream_cb=stream_cb)
+        # If streaming didn't fire (cache hit), print the cached line.
+        if stream_cb is not None and not streamed["on"]:
+            recent = data.get("teaching", {}).get(task_id, [])
+            if recent and recent[-1].get("llm_feedback"):
+                cache_dict2 = data.get("llm_cache", {})
+                ans = recent[-1].get("answer", "")
+                key = _llm_cache_key(task_id, i, ans)
+                tag = "[dim](cached)[/dim]" if key in cache_dict2 else "[dim](live)[/dim]"
+                console.print(f"[magenta]LLM feedback:[/magenta] {recent[-1]['llm_feedback']} {tag}")
+        if stream_cb is not None and streamed["on"]:
+            console.print()  # newline after streamed text
         recent = data.get("teaching", {}).get(task_id, [])
         if recent and recent[-1].get("answer", "").lower() == "skip":
             break
