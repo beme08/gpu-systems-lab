@@ -66,6 +66,18 @@ pip install typer rich
 Python 3.9+. No GPU required to *run the CLI* - you only need a GPU
 to actually execute the labs.
 
+## How To Test
+
+```bash
+pip install -e ".[dev]"
+pytest
+```
+
+The test suite is ~110 unit tests, runs in under a second, and covers the
+storage backfill, regex matching, cache lookup, score math, render
+functions, and prompt flows. New units should land with tests. CI runs
+the same command on every push to `main` (see `.github/workflows/test.yml`).
+
 ## Layout
 
 ```
@@ -114,6 +126,7 @@ This project was built bottom-up so you can ship each version on its own:
 | v0.19 | More `teaching_prompts` coverage: `llm_batch_serving` + `serving_first_request` (reality-check teaching now 4/4) | done |
 | v0.20 | Richer LLM feedback: `GPU_LLM_MODEL` env var (allowlist of 4) + response cache (`storage.llm_cache`) + streaming + (cached/fresh/live) tag (Candidate A from issue #4) | done |
 | v0.21 | Bottleneck follow-up prompts on 8/9 `bottleneck_pick` tasks (reality_check-style teaching for the bottleneck step + `misconception_hit` flag) (Candidate A from issue #5) | done |
+| v0.22 | Real test framework: pytest + `tests/` + GitHub Actions CI on push (110 unit tests, 15+ units covered) (Candidate A from issue #6) | done |
 
 ## Tracks
 

@@ -158,7 +158,20 @@ are rendered only by `gpu compute`. The `domains` field is what
 
 ## Testing your change
 
-This repo has no test framework. Smoke checks before opening a PR:
+Run the unit test suite from the repo root:
+
+```bash
+pip install -e ".[dev]"
+pytest
+```
+
+The test suite is ~110 unit tests covering regex matching, cache lookup,
+score math, storage backfill, render functions, and prompt flows. It
+runs in under a second. CI runs the same command on every push to
+`main` (see `.github/workflows/test.yml`). New units in `gpu.py` should
+land with corresponding tests in `tests/`.
+
+For end-to-end smoke checks (the v0.x manual ritual, still useful):
 
 - `gpu done <id>` on the new task: prompts fire as expected
   (bottleneck, reality, summary).
