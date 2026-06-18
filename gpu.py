@@ -78,6 +78,7 @@ def default_storage(roadmap: Dict[str, Any]) -> Dict[str, Any]:
         "completed_at": {},  # task_id -> ISO 8601 UTC string ("when was this task done")
         "teaching": {},      # task_id -> list of {question, answer, feedback, asked_at} (v0.16)
         "llm_cache": {},     # "task_id|prompt_index|answer_norm" -> {model, text, cached_at} (v0.20)
+        "bottleneck_followup": {},  # task_id -> {question, answer, feedback, misconception_hit, asked_at} (v0.21)
     }
 
 
@@ -125,6 +126,7 @@ def load_storage() -> Dict[str, Any]:
     data.setdefault("completed_at", {})
     data.setdefault("teaching", {})
     data.setdefault("llm_cache", {})
+    data.setdefault("bottleneck_followup", {})
     return data
 
 
@@ -705,6 +707,67 @@ def _pattern_in(pattern: str, answer_lower: str) -> bool:
         return False
 
 
+def prompt_bottleneck_followup(
+    task: Dict[str, Any],
+    data: Dict[str, Any],
+    task_id: str,
+) -> None:
+    """Prompt the user to explain *why* they picked the bottleneck. v0.21.
+
+    Renders `task["bottleneck_followup"]` as a free-text Panel. The
+    user can `skip` to leave blank. On a non-skip answer, runs the
+    v0.18 layered feedback (give_teaching_feedback) and records the
+    result in `data["bottleneck_followup"][task_id]`. The misconception
+    regex is re-run inline so we can set `misconception_hit: true`
+    without changing `give_teaching_feedback`'s return type.
+
+    Quiet no-op if the task has no `bottleneck_followup` field, if the
+    user already answered (re-run detection), or if the user typed
+    `skip`.
+    """
+    followup = task.get("bottleneck_followup")
+    if not followup:
+        return
+    if data.get("bottleneck_followup", {}).get(task_id):
+        # Already answered on a prior run; do not re-ask.
+        return
+    console.print(Panel(
+        f"Bottleneck Follow-up\n\n{followup['question']}",
+        title="Bottleneck Follow-up",
+        border_style="yellow",
+    ))
+    console.print(
+        "[dim]A good answer: ~1-2 sentences, names the principle that led "
+        "to your pick, gives a number or example when you can.[/dim]"
+    )
+    console.print("(type 'skip' to leave blank)")
+    try:
+        ans = typer.prompt("Your answer").strip()
+    except (typer.Abort, EOFError, KeyboardInterrupt):
+        ans = "skip"
+    if not ans or ans.lower() == "skip":
+        return
+    feedback = give_teaching_feedback(ans, followup)
+    # Detect misconception hit inline (re-run the regex; small list).
+    misconception_hit = False
+    for mc in (followup.get("common_misconceptions") or []):
+        pat = (mc or {}).get("pattern", "")
+        if pat and _pattern_in(pat, ans.lower()):
+            misconception_hit = True
+            break
+    data.setdefault("bottleneck_followup", {})[task_id] = {
+        "question": followup["question"],
+        "answer": ans,
+        "feedback": feedback,
+        "misconception_hit": misconception_hit,
+        "asked_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+    }
+    if feedback:
+        console.print(f"[yellow]Follow-up feedback:[/yellow] {feedback}")
+    if misconception_hit:
+        console.print("[yellow]Note: misconception flagged on this answer.[/yellow]")
+
+
 def give_teaching_feedback(answer: str, prompt: Dict[str, Any]) -> str:
     """Hand-coded feedback for a teaching answer. v0.16 + v0.18.
 
@@ -1154,6 +1217,16 @@ def done(
         # pre-classified: just record it
         data["bottlenecks"][task_id] = task["bottleneck"]
 
+    # Bottleneck follow-up (v0.21). Fires only when the user picked a
+    # category (bottleneck_pick + recorded bid) AND the task has a
+    # `bottleneck_followup` field. Pre-classified tasks skip this step.
+    if (
+        task.get("bottleneck_pick")
+        and data["bottlenecks"].get(task_id)
+        and task.get("bottleneck_followup")
+    ):
+        prompt_bottleneck_followup(task, data, task_id)
+
     # Reality check
     if task.get("reality_check"):
         ans = prompt_reality(task)
@@ -1331,6 +1404,20 @@ def _render_explain_task(task_id: str, data: Dict[str, Any]) -> None:
         )
         console.print(Panel(body, title="BENCHMARK", border_style="green"))
 
+    # Bottleneck follow-up (v0.21). Q5-style: quiet when absent.
+    bf = data.get("bottleneck_followup", {}).get(task_id)
+    if bf:
+        misc_line = ""
+        if bf.get("misconception_hit"):
+            misc_line = "[yellow]Note: misconception flagged.[/yellow]\n\n"
+        body = (
+            f"{misc_line}"
+            f"question:  {bf.get('question', '')}\n"
+            f"answer:    {bf.get('answer', '')}\n"
+            f"feedback:  {bf.get('feedback', '')}"
+        )
+        console.print(Panel(body, title="BOTTLENECK FOLLOW-UP", border_style="yellow"))
+
     # Teaching log (v0.16 + v0.17). Q5-style: quiet when absent.
     teaching_log = data.get("teaching", {}).get(task_id) or []
     if teaching_log:
@@ -1355,7 +1442,8 @@ def _render_explain_task(task_id: str, data: Dict[str, Any]) -> None:
             tt.add_row(*row)
         console.print(tt)
 
-    if not (bid or ans or rec or teaching_log):
+    bf_check = bool(data.get("bottleneck_followup", {}).get(task_id))
+    if not (bid or ans or rec or teaching_log or bf_check):
         console.print("[yellow]No records for this task.[/yellow]")
 
 

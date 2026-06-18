@@ -121,6 +121,29 @@
         "impact": 3,
         "depth": 3,
         "reproducibility": 5
+      },
+      "bottleneck_followup": {
+        "question": "Why is bandwidthTest's main number device-to-device bandwidth, not host-to-device?",
+        "expected_answers": [
+          {
+            "pattern": "pcie|host|overhead|transfer|bus",
+            "response": "PCIe matters at transfer time, but bandwidthTest reports the sustained device-memory number, which is what limits in-kernel data movement."
+          }
+        ],
+        "common_misconceptions": [
+          {
+            "pattern": "\\bgpu\\b.*(fast|powerful|many core)|parallel.*(fast|fast enough)",
+            "response": "Not quite - the device-memory bus is the bottleneck bandwidthTest measures, not the SM compute. The number is bytes-per-second between HBM and SMs, not PCIe."
+          }
+        ],
+        "expected_keywords": [
+          "memory",
+          "bandwidth",
+          "pcie",
+          "device"
+        ],
+        "follow_up_if_match": "Right - the device-memory bus is what limits in-kernel data movement; PCIe only shows up at transfer time.",
+        "follow_up_if_miss": "Hint: bandwidthTest measures device-to-device bandwidth (HBM <-> SMs). PCIe shows up at host<->device transfer, not in steady-state kernels."
       }
     },
     {
@@ -226,6 +249,30 @@
         "impact": 4,
         "depth": 3,
         "reproducibility": 3
+      },
+      "bottleneck_followup": {
+        "question": "Why does nsys show 'kernels' as the top time spender on a memory-bound kernel?",
+        "expected_answers": [
+          {
+            "pattern": "sm.*busy|sm.*wait|sm.*idle|waiting on memory|memory.*latency|stall",
+            "response": "Right - 'kernels' time is the time the SMs are *busy*, including waiting on memory. A memory-bound kernel keeps the SMs busy stalling on loads, not doing FLOPs."
+          }
+        ],
+        "common_misconceptions": [
+          {
+            "pattern": "compute|flop|throughput|utilization",
+            "response": "Not quite - 'kernels' time is wall-clock spent in the kernel, not FLOP throughput. On a memory-bound kernel, the SMs are busy stalling on loads, not executing instructions."
+          }
+        ],
+        "expected_keywords": [
+          "memory",
+          "sm",
+          "stall",
+          "wait",
+          "latency"
+        ],
+        "follow_up_if_match": "Right - 'kernels' is wall-clock in the kernel. On memory-bound code, most of that is stalls.",
+        "follow_up_if_miss": "Hint: 'kernels' is total time in the kernel. A memory-bound kernel still has the SMs 'busy' - just stalling on loads, not executing FLOPs."
       }
     },
     {
@@ -316,6 +363,29 @@
         "impact": 4,
         "depth": 3,
         "reproducibility": 4
+      },
+      "bottleneck_followup": {
+        "question": "Why is a 4096x4096 matmul closer to compute-bound than a 1024x1024?",
+        "expected_answers": [
+          {
+            "pattern": "arithmetic intensity|flop.*byte|reuse|tile",
+            "response": "Arithmetic intensity scales with matrix size; small matrices don't reuse cache lines enough to feed the tensor cores, so memory bandwidth dominates."
+          }
+        ],
+        "common_misconceptions": [
+          {
+            "pattern": "bigger.*(faster|compute)|more.*(flop|sm)|tensor core.*only.*big",
+            "response": "Not quite - size matters because of arithmetic intensity, not just total FLOPs. A 1024x1024 has too little reuse per byte loaded to keep the tensor cores fed."
+          }
+        ],
+        "expected_keywords": [
+          "arithmetic intensity",
+          "reuse",
+          "tile",
+          "cache"
+        ],
+        "follow_up_if_match": "Right - bigger matrices mean more reuse per byte loaded, which raises arithmetic intensity past the ridge point.",
+        "follow_up_if_miss": "Hint: think about how many FLOPs happen per byte loaded. Small matrices don't reuse cache lines enough to feed the tensor cores."
       }
     },
     {
@@ -506,7 +576,31 @@
       "compute_paths": [
         "runpod",
         "lambda_labs"
-      ]
+      ],
+      "bottleneck_followup": {
+        "question": "Why is attention memory-bound for long sequences?",
+        "expected_answers": [
+          {
+            "pattern": "kv|o\\\\(n.*d\\\\)|o\\\\(n\\\\^?2|full.*cache|each.*token.*kv",
+            "response": "Each token reads/writes the full KV cache every step; the FLOPs are O(N*d^2) but the memory is O(N^2*d), which dominates past N ~= d."
+          }
+        ],
+        "common_misconceptions": [
+          {
+            "pattern": "qkv|q\\\\.k|softmax.*compute|flashattention.*solve",
+            "response": "Not quite - FlashAttention changes the constant but not the asymptotic story; for long N, you still touch O(N^2) memory in the K/V loads."
+          }
+        ],
+        "expected_keywords": [
+          "kv",
+          "cache",
+          "memory",
+          "sequence",
+          "token"
+        ],
+        "follow_up_if_match": "Right - per-step memory grows as O(N*d) per token, so total memory is O(N^2*d), which outpaces the O(N*d^2) FLOPs when N is large.",
+        "follow_up_if_miss": "Hint: think about what each generated token has to read. The KV cache grows linearly with sequence length, so per-step memory grows too."
+      }
     },
     {
       "id": "triton_kernel_report",
@@ -608,7 +702,31 @@
         "google_colab",
         "kaggle_notebooks",
         "runpod"
-      ]
+      ],
+      "bottleneck_followup": {
+        "question": "Why is 'time to first token' a memory-bound metric, not compute-bound?",
+        "expected_answers": [
+          {
+            "pattern": "prefill.*parallel|first.*decode.*single|one.*token.*memory|warmup.*kv",
+            "response": "Prefill is compute-bound (parallel), but TTFT includes the first decode step, which is a single-token memory-bound lookup against the freshly-built KV cache."
+          }
+        ],
+        "common_misconceptions": [
+          {
+            "pattern": "prefill.*(long|slow|main)|bigger.*prompt.*slower",
+            "response": "Not quite - prefill is the slow part, but it's compute-bound and parallel. TTFT specifically measures the wall-clock to the first *output* token, which depends on the first decode step."
+          }
+        ],
+        "expected_keywords": [
+          "prefill",
+          "decode",
+          "kv",
+          "first",
+          "token"
+        ],
+        "follow_up_if_match": "Right - TTFT = prefill + first-decode. The first decode is memory-bound (one new token, full KV read).",
+        "follow_up_if_miss": "Hint: TTFT = prefill time + first decode step. Prefill is compute-bound (parallel); the first decode is memory-bound (one token, full KV read)."
+      }
     },
     {
       "id": "llm_kv_cache_profiled",
@@ -643,7 +761,31 @@
       "compute_paths": [
         "google_colab",
         "runpod"
-      ]
+      ],
+      "bottleneck_followup": {
+        "question": "Why does decode-step latency stay roughly constant as the prompt grows, but prefill latency scales linearly?",
+        "expected_answers": [
+          {
+            "pattern": "o\\\\(1\\\\).*decode|one.*token|constant.*work|kv.*append",
+            "response": "Decode does O(1) work per step (one new token, one KV-cache append); prefill does O(N) work to process the full prompt."
+          }
+        ],
+        "common_misconceptions": [
+          {
+            "pattern": "kv.*grow|memory.*grow|longer.*slower|cache.*read",
+            "response": "Not quite - the KV cache does grow, but per-step decode work is O(1) in N. The cache read is one new row of K and V, not a scan of the full cache."
+          }
+        ],
+        "expected_keywords": [
+          "decode",
+          "constant",
+          "prefill",
+          "linear",
+          "kv"
+        ],
+        "follow_up_if_match": "Right - per-step decode work is O(1) in sequence length; only prefill scales with N.",
+        "follow_up_if_miss": "Hint: what does each decode step actually *do*? It's one new token, one KV append. Prefill processes the whole prompt, so it scales with N."
+      }
     },
     {
       "id": "llm_batch_serving",
@@ -972,7 +1114,31 @@
       "compute_paths": [
         "runpod",
         "lambda_labs"
-      ]
+      ],
+      "bottleneck_followup": {
+        "question": "Why does streaming responses (sending tokens as they're decoded) reduce TTFT but not TPOT?",
+        "expected_answers": [
+          {
+            "pattern": "network.*overlap|ttft.*wire|bytes.*hit|first.*byte|send.*as.*decode",
+            "response": "TTFT is wall-clock until the first byte hits the wire; streaming overlaps network with decode. TPOT is per-token-decode time, which is unchanged."
+          }
+        ],
+        "common_misconceptions": [
+          {
+            "pattern": "smaller.*chunk|faster.*token|less.*compute|stream.*parallel",
+            "response": "Not quite - streaming doesn't change decode speed; it changes when the *client* sees the first byte. TPOT measures decode-side latency, which is the same with or without streaming."
+          }
+        ],
+        "expected_keywords": [
+          "ttft",
+          "tpot",
+          "network",
+          "stream",
+          "wire"
+        ],
+        "follow_up_if_match": "Right - TTFT is wire-side, TPOT is decode-side. Streaming overlaps network with decode, so it shrinks TTFT but not TPOT.",
+        "follow_up_if_miss": "Hint: TTFT measures the time until the *client* sees the first byte. TPOT measures per-token decode time. Streaming changes the first, not the second."
+      }
     },
     {
       "id": "serving_batching_under_load",
@@ -1169,7 +1335,31 @@
         "google_colab",
         "runpod",
         "lambda_labs"
-      ]
+      ],
+      "bottleneck_followup": {
+        "question": "Why might the int8 student match the teacher on accuracy but lose 2x on throughput?",
+        "expected_answers": [
+          {
+            "pattern": "dequant|kernel|atypical|fall.*off|unoptimized|path",
+            "response": "Int8 cuts memory bandwidth and weight loads, but dequant + atypical tensor shapes often fall off the optimized kernel paths."
+          }
+        ],
+        "common_misconceptions": [
+          {
+            "pattern": "smaller.*(faster|compute)|less.*(memory|bandwidth)|int8.*fast",
+            "response": "Not quite - int8 reduces memory, but the throughput win assumes the kernel path stays optimized. If shapes are unusual, the kernel falls back to a slower path and dequant overhead eats the savings."
+          }
+        ],
+        "expected_keywords": [
+          "int8",
+          "dequant",
+          "kernel",
+          "throughput",
+          "shape"
+        ],
+        "follow_up_if_match": "Right - int8 helps when the kernel path stays optimized. Atypical shapes can drop you into a slower path where dequant overhead eats the savings.",
+        "follow_up_if_miss": "Hint: int8 reduces memory bandwidth, but the throughput win assumes an optimized kernel. If shapes are unusual, dequant overhead can eat the savings."
+      }
     },
     {
       "id": "distill_int4_quant",
