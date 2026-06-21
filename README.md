@@ -128,6 +128,7 @@ This project was built bottom-up so you can ship each version on its own:
 | v0.21 | Bottleneck follow-up prompts on 8/9 `bottleneck_pick` tasks (reality_check-style teaching for the bottleneck step + `misconception_hit` flag) (Candidate A from issue #5) | done |
 | v0.22 | Real test framework: pytest + `tests/` + GitHub Actions CI on push (110 unit tests, 15+ units covered) (Candidate A from issue #6) | done |
 | v0.23 | Two new teaching surfaces: `deliverable_prompts` (5 report tasks) + `command_prompts` (15 install/measure tasks) using the v0.18 layered schema. 32/32 tasks now have a teaching loop. | done |
+| v0.24 | Week 6 curriculum: `parallel` track (4 tasks: `sharding_intro`, `tensor_parallel_demo`, `pipeline_parallel_demo`, `parallel_scaling_report`) + 3 new skills (`parallel_strategies`, `tensor_parallelism`, `pipeline_parallelism`) + 1 new milestone (`parallel_strategies_week6`). 36/36 tasks. 100% teaching coverage. (Candidate A from issue #7) | done |
 
 ## Tracks
 
@@ -136,7 +137,11 @@ in `gpu status` as a per-track progress panel between the current task
 and the skill tree. The CUDA track has Week 1 + Week 2 (Triton) tasks (14 total).
 The LLM track has Week 3 (LLM inference) tasks (6 total).
 The Systems track has Week 4 (GPU serving) tasks (6 total).
-The Distillation track is a placeholder for v0.13.
+The Distillation track has Week 5 (distillation) tasks (6 total).
+The Parallel track has Week 6 (parallel strategies) tasks (4 total) -
+sharding_intro (read Megatron-LM sections 1-2), tensor_parallel_demo
+(2-way sharded matmul), pipeline_parallel_demo (4-stage pipeline + bubble),
+and parallel_scaling_report (synthesis: when does each strategy win).
 To add tasks to a track, just add a task with `"track": "llm"` (etc.)
 to the `tasks` array — it will appear in that track's bar automatically.
 

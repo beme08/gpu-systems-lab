@@ -37,6 +37,18 @@
     {
       "id": "lora_methods",
       "name": "LoRA & Parameter-Efficient Fine-Tuning"
+    },
+    {
+      "id": "parallel_strategies",
+      "name": "Parallel Strategies"
+    },
+    {
+      "id": "tensor_parallelism",
+      "name": "Tensor Parallelism"
+    },
+    {
+      "id": "pipeline_parallelism",
+      "name": "Pipeline Parallelism"
     }
   ],
   "tasks": [
@@ -1977,6 +1989,326 @@
         "follow_up_if_match": "Good - the 4 methods trade off across memory, compute, adaptation, and quality. Each has a workload class where it's best.",
         "follow_up_if_miss": "Hint: think about which bottleneck each method attacks. int8 -> memory bandwidth, LoRA -> adaptation, logit KD -> quality, int4 -> extreme memory pressure."
       }
+    },
+    {
+      "id": "sharding_intro",
+      "title": "Read the Megatron-LM paper \u00a71-2 and write a 1-page sharding primer",
+      "mode": "Parallel Lab",
+      "objective": "Understand why models are sharded, the 3 sharding dimensions (tensor / pipeline / sequence), and the trade-offs.",
+      "deliverable": "notes/parallel_intro.md with: (1) what sharding is, (2) the 3 dimensions, (3) one sentence each on the trade-off.",
+      "skills": {
+        "parallel_strategies": 10
+      },
+      "track": "parallel",
+      "prerequisites": [
+        "distill_synthesis_report"
+      ],
+      "unlocks": [
+        "tensor_parallel_demo"
+      ],
+      "milestone": "parallel_strategies_week6",
+      "score": {
+        "impact": 3,
+        "depth": 3,
+        "reproducibility": 5
+      },
+      "command_prompts": {
+        "question": "What 3 sharding dimensions does the Megatron paper distinguish, and what does each one split?",
+        "expected_answers": [
+          {
+            "pattern": "tensor|model|layer|weight",
+            "response": "Right - tensor parallelism splits individual weight matrices across devices (e.g. split a Linear's rows or columns)."
+          },
+          {
+            "pattern": "pipeline|stage|depth|layer",
+            "response": "Right - pipeline parallelism splits the model by depth, putting consecutive layers on different devices."
+          },
+          {
+            "pattern": "sequence|context|length|token",
+            "response": "Right - sequence parallelism splits the sequence dimension, useful for very long contexts."
+          }
+        ],
+        "common_misconceptions": [
+          {
+            "pattern": "data.*parallel|replicate|copy",
+            "response": "Not quite - data parallelism is a 4th dimension (replicate the model, split the batch) and is different from sharding. The paper's 3 sharding dimensions are all about splitting the *model itself*."
+          }
+        ],
+        "expected_keywords": [
+          "tensor",
+          "pipeline",
+          "sequence"
+        ],
+        "follow_up_if_match": "Good - tensor (weights), pipeline (depth), sequence (tokens). Data parallelism is a separate concept (split the batch, not the model).",
+        "follow_up_if_miss": "Hint: tensor = split the weights of one layer. pipeline = split the layers across devices. sequence = split the tokens across devices."
+      },
+      "deliverable_prompts": {
+        "question": "What 3 sections must your notes/parallel_intro.md have to be complete?",
+        "expected_answers": [
+          {
+            "pattern": "what.*shard|definition|sharding",
+            "response": "Right - section 1 defines sharding: when a model's parameters, activations, or optimizer state don't fit on one device."
+          },
+          {
+            "pattern": "3.*dimension|tensor.*pipeline|three",
+            "response": "Right - section 2 names the 3 dimensions (tensor, pipeline, sequence) and what each splits."
+          },
+          {
+            "pattern": "trade.?off|communicat|overhead",
+            "response": "Right - section 3 covers the trade-offs: each sharding dimension introduces a specific communication pattern (all-reduce for tensor, send/recv for pipeline, all-gather for sequence)."
+          }
+        ],
+        "common_misconceptions": [
+          {
+            "pattern": "just.*split|easy|free",
+            "response": "Not quite - sharding always introduces communication overhead. The 3 sections are: what, dimensions, trade-offs."
+          }
+        ],
+        "expected_keywords": [
+          "sharding",
+          "dimension",
+          "trade",
+          "communicat"
+        ],
+        "follow_up_if_match": "Good - 3 sections: what sharding is, the 3 dimensions, the trade-offs (especially the communication cost).",
+        "follow_up_if_miss": "Hint: 3 sections. (1) what sharding is and when you need it, (2) the 3 dimensions, (3) the trade-offs (focus on communication)."
+      }
+    },
+    {
+      "id": "tensor_parallel_demo",
+      "title": "Run a small tensor-parallel matmul (2-way sharded) and measure speedup vs unsharded",
+      "mode": "Parallel Lab",
+      "objective": "Set up a 2-way tensor-parallel matmul on 2 GPUs (or simulated via PyTorch dtensors), measure per-step latency, compare against the unsharded baseline.",
+      "commands": [
+        "mkdir -p labs/tensor_parallel",
+        "touch labs/tensor_parallel/tp_matmul.py",
+        "python labs/tensor_parallel/tp_matmul.py"
+      ],
+      "deliverable": "labs/tensor_parallel/tp_matmul.py + notes/tp_results.md with the per-step latency (ms) for both configurations.",
+      "skills": {
+        "parallel_strategies": 5,
+        "tensor_parallelism": 10,
+        "pytorch_internals": 5
+      },
+      "track": "parallel",
+      "prerequisites": [
+        "sharding_intro"
+      ],
+      "unlocks": [
+        "pipeline_parallel_demo"
+      ],
+      "milestone": "parallel_strategies_week6",
+      "score": {
+        "impact": 4,
+        "depth": 4,
+        "reproducibility": 4
+      },
+      "bottleneck_pick": true,
+      "bottleneck_hint": "communication_bound",
+      "bottleneck_followup": {
+        "question": "Why does 2-way tensor-parallel matmul often run *slower* than the unsharded version on small matrices?",
+        "expected_answers": [
+          {
+            "pattern": "all.?reduce|communicat|overhead",
+            "response": "Right - tensor parallelism adds an all-reduce per matmul. For small matrices, the all-reduce cost exceeds the FLOP savings."
+          },
+          {
+            "pattern": "small|matrix.*size|too.*small",
+            "response": "Right - the crossover point is when the per-step FLOPs saved by sharding exceed the all-reduce cost. For small matrices, that's not the case."
+          }
+        ],
+        "common_misconceptions": [
+          {
+            "pattern": "2x.*speedup|always.*faster|linear",
+            "response": "Not quite - tensor parallelism is not always faster. Below the crossover point, the all-reduce dominates and TP is slower than single-GPU."
+          }
+        ],
+        "expected_keywords": [
+          "all-reduce",
+          "small",
+          "overhead",
+          "crossover"
+        ],
+        "follow_up_if_match": "Good - the all-reduce cost is fixed per step. Below the crossover matrix size, it dominates. That's the breakeven.",
+        "follow_up_if_miss": "Hint: tensor parallelism adds an all-reduce on every matmul. For small matrices, that all-reduce costs more than the FLOPs you save."
+      },
+      "command_prompts": {
+        "question": "What does the demo script do, in 3 steps?",
+        "expected_answers": [
+          {
+            "pattern": "shard|dtensor|distribute|split",
+            "response": "Right - step 1 creates a 2-way sharded weight (via dtensor or manual split) for one matmul."
+          },
+          {
+            "pattern": "matmul|gemm|forward",
+            "response": "Right - step 2 runs the matmul: each GPU does its slice, then an all-reduce sums the partial results."
+          },
+          {
+            "pattern": "time|measure|latency|compare|baseline",
+            "response": "Right - step 3 times both the sharded and unsharded versions, prints the ratio."
+          }
+        ],
+        "common_misconceptions": [
+          {
+            "pattern": "just.*split|just.*faster|one.*line",
+            "response": "Not quite - the demo needs all 3 steps: shard the weight, run the matmul + all-reduce, time + compare to baseline."
+          }
+        ],
+        "expected_keywords": [
+          "shard",
+          "matmul",
+          "time",
+          "compare"
+        ],
+        "follow_up_if_match": "Good - 3 steps: shard weight, matmul + all-reduce, time + compare.",
+        "follow_up_if_miss": "Hint: 3 steps. (1) shard the weight, (2) run the matmul with all-reduce, (3) time both versions and compare."
+      }
+    },
+    {
+      "id": "pipeline_parallel_demo",
+      "title": "Run a small pipeline-parallel model (4 stages) and measure the pipeline bubble",
+      "mode": "Parallel Lab",
+      "objective": "Split a tiny transformer (e.g. 4 layers) into 4 stages on 4 devices. Measure the bubble: idle time at the start (filling the pipeline) and end (draining).",
+      "commands": [
+        "mkdir -p labs/pipeline_parallel",
+        "touch labs/pipeline_parallel/pp_model.py",
+        "python labs/pipeline_parallel/pp_model.py"
+      ],
+      "deliverable": "labs/pipeline_parallel/pp_model.py + notes/pp_results.md with: stage timing, bubble time, bubble % of total step time, at microbatch sizes 1, 4, 16.",
+      "skills": {
+        "parallel_strategies": 5,
+        "pipeline_parallelism": 10,
+        "pytorch_internals": 5
+      },
+      "track": "parallel",
+      "prerequisites": [
+        "tensor_parallel_demo"
+      ],
+      "unlocks": [
+        "parallel_scaling_report"
+      ],
+      "milestone": "parallel_strategies_week6",
+      "score": {
+        "impact": 4,
+        "depth": 4,
+        "reproducibility": 4
+      },
+      "bottleneck_pick": true,
+      "bottleneck_hint": "communication_bound",
+      "bottleneck_followup": {
+        "question": "Why does the pipeline bubble shrink as you increase the number of microbatches?",
+        "expected_answers": [
+          {
+            "pattern": "warmup|drain|filling",
+            "response": "Right - the bubble is the warmup + drain phase, when some stages are idle waiting for the first or last microbatch. With more microbatches, the steady-state fraction grows and warmup+drain is a smaller fraction of total."
+          },
+          {
+            "pattern": "amortiz|overlap|hide",
+            "response": "Right - more microbatches let you amortize the bubble across more useful compute, hiding the idle time."
+          }
+        ],
+        "common_misconceptions": [
+          {
+            "pattern": "microbatch.*bigger|just.*faster",
+            "response": "Not quite - more microbatches means the same bubble time spread across more useful work. The bubble doesn't shrink; its *fraction* of total time does."
+          }
+        ],
+        "expected_keywords": [
+          "bubble",
+          "warmup",
+          "drain",
+          "microbatch",
+          "amortize"
+        ],
+        "follow_up_if_match": "Good - more microbatches amortize the fixed bubble cost across more useful work. The absolute bubble time is the same; the fraction shrinks.",
+        "follow_up_if_miss": "Hint: the bubble itself (start + end) is the same duration. The question is what fraction of *total* step time it occupies. More microbatches = more useful work to spread it over."
+      },
+      "command_prompts": {
+        "question": "What does the pipeline-parallel script measure, and what's a 'bubble'?",
+        "expected_answers": [
+          {
+            "pattern": "stage|device|partition",
+            "response": "Right - the script partitions the model into N stages (here 4), each on its own device."
+          },
+          {
+            "pattern": "microbatch|chunk|small",
+            "response": "Right - each batch is split into M microbatches that flow through the pipeline one after another."
+          },
+          {
+            "pattern": "bubble|idle|warmup|drain",
+            "response": "Right - the bubble is the time at the start (stage 1 works alone, then 1+2, then 1+2+3) and end (drain) when some stages are idle."
+          }
+        ],
+        "common_misconceptions": [
+          {
+            "pattern": "bubble.*compute|just.*wait|easy",
+            "response": "Not quite - the bubble is wasted compute, not useful compute. It's the time when at least one device is idle because the pipeline is filling or draining."
+          }
+        ],
+        "expected_keywords": [
+          "stage",
+          "microbatch",
+          "bubble",
+          "warmup",
+          "drain"
+        ],
+        "follow_up_if_match": "Good - N stages, M microbatches, bubble = warmup + drain when some stages are idle. With more M, the bubble is a smaller fraction of total step time.",
+        "follow_up_if_miss": "Hint: 3 things. (1) N stages on N devices, (2) M microbatches flowing through, (3) bubble = the start + end where not every stage is busy."
+      }
+    },
+    {
+      "id": "parallel_scaling_report",
+      "title": "Parallel strategies synthesis: when does each one beat the others?",
+      "mode": "Synthesis",
+      "objective": "Write a synthesis report comparing the two demos (tensor + pipeline) to a single-GPU baseline, and to each other. At what model size does each strategy win?",
+      "deliverable": "reports/parallel-week6-report.md with: (1) the 3 strategy options, (2) the crossover points (model size, batch size), (3) your measurement table.",
+      "skills": {
+        "parallel_strategies": 10,
+        "tensor_parallelism": 5,
+        "pipeline_parallelism": 5
+      },
+      "track": "parallel",
+      "prerequisites": [
+        "pipeline_parallel_demo"
+      ],
+      "unlocks": [],
+      "milestone": "parallel_strategies_week6",
+      "score": {
+        "impact": 4,
+        "depth": 3,
+        "reproducibility": 5
+      },
+      "deliverable_prompts": {
+        "question": "What 3 sections does your parallel synthesis report need?",
+        "expected_answers": [
+          {
+            "pattern": "option|strategy|tensor.*pipeline|single",
+            "response": "Right - section 1 names the 3 strategy options: single-GPU, tensor-parallel, pipeline-parallel."
+          },
+          {
+            "pattern": "crossover|size|threshold|when",
+            "response": "Right - section 2 covers the crossover points: at what model size or batch size does each strategy start winning?"
+          },
+          {
+            "pattern": "measure|table|number|result",
+            "response": "Right - section 3 is your measurement table: latency (ms) and bubble % from the two demos, in a single comparison."
+          }
+        ],
+        "common_misconceptions": [
+          {
+            "pattern": "always.*one.*best|just.*use",
+            "response": "Not quite - no single strategy is always best. The whole point of the synthesis is the crossover: each one wins in a different regime."
+          }
+        ],
+        "expected_keywords": [
+          "strategy",
+          "crossover",
+          "measure",
+          "table"
+        ],
+        "follow_up_if_match": "Good - 3 sections: 3 strategy options, crossover points, your measurement table. The synthesis IS the crossover analysis.",
+        "follow_up_if_miss": "Hint: 3 sections. (1) the 3 strategy options, (2) when each wins (crossover points), (3) your measured numbers from the demos."
+      }
     }
   ],
   "tracks": {
@@ -1995,6 +2327,10 @@
     "distillation": {
       "title": "Distillation Track",
       "description": "Compression, teacher-student training, quantization, and evaluation."
+    },
+    "parallel": {
+      "title": "Parallel Track",
+      "description": "Sharding strategies (tensor, pipeline, sequence) for models that don't fit on one GPU."
     }
   },
   "resources": [
@@ -2177,6 +2513,19 @@
         "distill_eval_compare",
         "distill_int4_quant",
         "distill_synthesis_report"
+      ]
+    },
+    "parallel_strategies_week6": {
+      "title": "Parallel Strategies - Week 6",
+      "tasks": [
+        "sharding_intro",
+        "tensor_parallel_demo",
+        "pipeline_parallel_demo",
+        "parallel_scaling_report"
+      ],
+      "domains": [
+        "parallel",
+        "distributed"
       ]
     }
   }
