@@ -79,6 +79,8 @@ def default_storage(roadmap: Dict[str, Any]) -> Dict[str, Any]:
         "teaching": {},      # task_id -> list of {question, answer, feedback, asked_at} (v0.16)
         "llm_cache": {},     # "task_id|prompt_index|answer_norm" -> {model, text, cached_at} (v0.20)
         "bottleneck_followup": {},  # task_id -> {question, answer, feedback, misconception_hit, asked_at} (v0.21)
+        "deliverable": {},       # task_id -> {question, answer, feedback, asked_at} (v0.23)
+        "command_walkthrough": {},  # task_id -> {question, answer, feedback, asked_at} (v0.23)
     }
 
 
@@ -127,6 +129,8 @@ def load_storage() -> Dict[str, Any]:
     data.setdefault("teaching", {})
     data.setdefault("llm_cache", {})
     data.setdefault("bottleneck_followup", {})
+    data.setdefault("deliverable", {})
+    data.setdefault("command_walkthrough", {})
     return data
 
 
@@ -768,6 +772,59 @@ def prompt_bottleneck_followup(
         console.print("[yellow]Note: misconception flagged on this answer.[/yellow]")
 
 
+def _prompt_teaching_surface(
+    task: Dict[str, Any],
+    data: Dict[str, Any],
+    task_id: str,
+    field: str,
+    storage_key: str,
+    title: str,
+    border_style: str,
+    feedback_style: str,
+) -> None:
+    """Generic helper for the v0.23 deliverable / command_walkthrough surfaces.
+
+    The shape of the prompt is the same as v0.16 teaching + v0.21
+    bottleneck_followup (one question per task, v0.18 layered feedback).
+    The two v0.23 surfaces differ only in title, border color, and
+    where the record is stored. This helper is the shared implementation;
+    the two callsites in `done` pass the right names.
+
+    No-op if the task has no `field` set, or if a record already exists
+    (re-run detection), or if the user types `skip`.
+    """
+    prompt = task.get(field)
+    if not prompt:
+        return
+    if data.get(storage_key, {}).get(task_id):
+        return
+    console.print(Panel(
+        f"{title}\n\n{prompt['question']}",
+        title=title,
+        border_style=border_style,
+    ))
+    console.print(
+        "[dim]A good answer: ~2-3 sentences, names the principle and a "
+        "concrete example or number when you can.[/dim]"
+    )
+    console.print("(type 'skip' to leave blank)")
+    try:
+        ans = typer.prompt("Your answer").strip()
+    except (typer.Abort, EOFError, KeyboardInterrupt):
+        ans = "skip"
+    if not ans or ans.lower() == "skip":
+        return
+    feedback = give_teaching_feedback(ans, prompt)
+    data.setdefault(storage_key, {})[task_id] = {
+        "question": prompt["question"],
+        "answer": ans,
+        "feedback": feedback,
+        "asked_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+    }
+    if feedback:
+        console.print(f"[{feedback_style}]{title} feedback:[/{feedback_style}] {feedback}")
+
+
 def give_teaching_feedback(answer: str, prompt: Dict[str, Any]) -> str:
     """Hand-coded feedback for a teaching answer. v0.16 + v0.18.
 
@@ -1268,9 +1325,30 @@ def done(
             err=True,
         )
 
+    # v0.23 teaching surfaces: deliverable + command_walkthrough.
+    # Fire AFTER the bench summary, BEFORE the existing teaching flow.
+    # Both use the v0.18 layered schema via _prompt_teaching_surface.
+    _prompt_teaching_surface(
+        task, data, task_id,
+        field="deliverable_prompts",
+        storage_key="deliverable",
+        title="Deliverable",
+        border_style="cyan",
+        feedback_style="cyan",
+    )
+    _prompt_teaching_surface(
+        task, data, task_id,
+        field="command_prompts",
+        storage_key="command_walkthrough",
+        title="Command Walkthrough",
+        border_style="magenta",
+        feedback_style="magenta",
+    )
+
     # Teaching flow (v0.16). Multi-step prompts with hand-coded feedback.
     # Fires AFTER the bench summary so the user is in a single, predictable
-    # prompt cadence: bottleneck -> reality -> bench summary -> teaching.
+    # prompt cadence: bottleneck -> reality -> bench summary ->
+    # deliverable -> command walkthrough -> teaching.
     # The user can 'skip' at any step. Quiet if the task has no
     # teaching_prompts.
     teaching = task.get("teaching_prompts") or []
@@ -1418,6 +1496,20 @@ def _render_explain_task(task_id: str, data: Dict[str, Any]) -> None:
         )
         console.print(Panel(body, title="BOTTLENECK FOLLOW-UP", border_style="yellow"))
 
+    # v0.23: deliverable + command_walkthrough sections. Q5-style quiet.
+    for sk, stitle, sborder in [
+        ("deliverable", "DELIVERABLE", "cyan"),
+        ("command_walkthrough", "COMMAND WALKTHROUGH", "magenta"),
+    ]:
+        rec = data.get(sk, {}).get(task_id)
+        if rec:
+            body = (
+                f"question:  {rec.get('question', '')}\n"
+                f"answer:    {rec.get('answer', '')}\n"
+                f"feedback:  {rec.get('feedback', '')}"
+            )
+            console.print(Panel(body, title=stitle, border_style=sborder))
+
     # Teaching log (v0.16 + v0.17). Q5-style: quiet when absent.
     teaching_log = data.get("teaching", {}).get(task_id) or []
     if teaching_log:
@@ -1443,7 +1535,9 @@ def _render_explain_task(task_id: str, data: Dict[str, Any]) -> None:
         console.print(tt)
 
     bf_check = bool(data.get("bottleneck_followup", {}).get(task_id))
-    if not (bid or ans or rec or teaching_log or bf_check):
+    dv_check = bool(data.get("deliverable", {}).get(task_id))
+    cw_check = bool(data.get("command_walkthrough", {}).get(task_id))
+    if not (bid or ans or rec or teaching_log or bf_check or dv_check or cw_check):
         console.print("[yellow]No records for this task.[/yellow]")
 
 

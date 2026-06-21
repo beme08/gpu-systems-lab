@@ -65,6 +65,36 @@
         "impact": 3,
         "depth": 2,
         "reproducibility": 5
+      },
+      "command_prompts": {
+        "question": "What does each of the 3 commands check, in order?",
+        "expected_answers": [
+          {
+            "pattern": "driver|gpu.*info|hardware",
+            "response": "Right - nvidia-smi shows the GPU model, driver version, and current utilization."
+          },
+          {
+            "pattern": "compiler|toolchain|cuda.*version|nvcc",
+            "response": "Right - nvcc --version shows the CUDA compiler version installed."
+          },
+          {
+            "pattern": "pytorch|torch|cuda.*available",
+            "response": "Right - the Python torch check verifies that PyTorch sees CUDA and can name the GPU. If it doesn't, PyTorch was built without CUDA support."
+          }
+        ],
+        "common_misconceptions": [
+          {
+            "pattern": "same.*thing|equivalent|redundant",
+            "response": "Not quite - the 3 commands check 3 different layers (driver, compiler, Python binding). Each can fail independently."
+          }
+        ],
+        "expected_keywords": [
+          "driver",
+          "compiler",
+          "pytorch"
+        ],
+        "follow_up_if_match": "Good - driver (nvidia-smi), compiler (nvcc), Python binding (torch). Three independent layers.",
+        "follow_up_if_miss": "Hint: 3 layers. nvidia-smi = driver. nvcc = compiler. torch = Python binding. Each can be missing or wrong."
       }
     },
     {
@@ -93,6 +123,37 @@
         "impact": 2,
         "depth": 2,
         "reproducibility": 5
+      },
+      "command_prompts": {
+        "question": "What 3 device properties does deviceQuery report that you'll need later?",
+        "expected_answers": [
+          {
+            "pattern": "\\bsm\\b|sm count|multiprocessor|stream",
+            "response": "Right - SM (streaming multiprocessor) count determines max parallelism and occupancy."
+          },
+          {
+            "pattern": "memory|global.*mem|hbm",
+            "response": "Right - global memory size and bandwidth set the upper bound for memory-bound kernel speed."
+          },
+          {
+            "pattern": "compute.*capability|sm_|\\bcc\\b|major|minor",
+            "response": "Right - compute capability (e.g. 8.0, 8.6) determines which PTX/SASS features you can use."
+          }
+        ],
+        "common_misconceptions": [
+          {
+            "pattern": "clock.*speed|frequency|gigahertz",
+            "response": "Not quite - clock speed is a single number, not 3 properties. The 3 properties you actually use later are SM count, memory size, and compute capability."
+          }
+        ],
+        "expected_keywords": [
+          "sm",
+          "memory",
+          "compute",
+          "capability"
+        ],
+        "follow_up_if_match": "Good - SM count, global memory, compute capability. These are the 3 you cite in every later task.",
+        "follow_up_if_miss": "Hint: the 3 you cite later are SM count (parallelism), global memory (size + bandwidth), compute capability (feature support)."
       }
     },
     {
@@ -410,6 +471,34 @@
         "impact": 3,
         "depth": 2,
         "reproducibility": 5
+      },
+      "deliverable_prompts": {
+        "question": "What are the 4 sections your gpu-week1-report.md needs to be complete?",
+        "expected_answers": [
+          {
+            "pattern": "hardware|driver|cuda|pytorch|os",
+            "response": "Right - the hardware section needs GPU model, driver version, CUDA version, PyTorch CUDA availability, and OS."
+          },
+          {
+            "pattern": "observation|find|learned|insight|number",
+            "response": "Right - 'key observations' is the place for the actual numbers you measured (bandwidth, kernel time, occupancy), not generic statements."
+          }
+        ],
+        "common_misconceptions": [
+          {
+            "pattern": "just.*summary|tl.?dr|short|quick",
+            "response": "Not quite - the deliverable is a structured report, not a summary. Each of the 4 sections needs concrete numbers from your runs."
+          }
+        ],
+        "expected_keywords": [
+          "hardware",
+          "observation",
+          "bottleneck",
+          "next",
+          "step"
+        ],
+        "follow_up_if_match": "Good. The 4 sections are: hardware, key observations, bottlenecks found, next steps.",
+        "follow_up_if_miss": "Hint: the deliverable lists 4 sections - hardware, key observations, bottlenecks found, and next steps. Name them."
       }
     },
     {
@@ -443,7 +532,34 @@
       "compute_paths": [
         "runpod",
         "lambda_labs"
-      ]
+      ],
+      "command_prompts": {
+        "question": "What does the 3-command sequence do?",
+        "expected_answers": [
+          {
+            "pattern": "venv|isolat|clean",
+            "response": "Right - the venv creates an isolated Python environment so Triton doesn't fight with your other projects."
+          },
+          {
+            "pattern": "pip|install|package",
+            "response": "Right - pip install pulls in Triton + PyTorch, which Triton depends on for tensor manipulation."
+          }
+        ],
+        "common_misconceptions": [
+          {
+            "pattern": "one.*step|all.*at.*once|simple",
+            "response": "Not quite - the venv-then-pip-then-verify pattern is the standard way to avoid version conflicts with other Python projects. It's not optional."
+          }
+        ],
+        "expected_keywords": [
+          "venv",
+          "install",
+          "triton",
+          "version"
+        ],
+        "follow_up_if_match": "Good - venv (isolation), pip install (deps), verify (print version).",
+        "follow_up_if_miss": "Hint: venv isolates, pip installs, the print line verifies. Three different purposes."
+      }
     },
     {
       "id": "triton_vector_add",
@@ -476,7 +592,34 @@
       "compute_paths": [
         "runpod",
         "lambda_labs"
-      ]
+      ],
+      "command_prompts": {
+        "question": "What 2-3 things does a Triton kernel need that a CUDA kernel doesn't?",
+        "expected_answers": [
+          {
+            "pattern": "block.*size|tile|grid|autotune",
+            "response": "Right - Triton kernels take a BLOCK_SIZE parameter (and often an autotune config) that's analogous to launch params in CUDA."
+          },
+          {
+            "pattern": "memory.*hint|load|store|cache",
+            "response": "Right - Triton uses tl.load / tl.store with cache modifiers instead of raw pointer arithmetic."
+          }
+        ],
+        "common_misconceptions": [
+          {
+            "pattern": "faster.*than|always.*better|drop.?in",
+            "response": "Not quite - Triton is not a drop-in CUDA replacement. You write a Python kernel with a JIT-compiled inner function. Different mental model."
+          }
+        ],
+        "expected_keywords": [
+          "block",
+          "tile",
+          "load",
+          "store"
+        ],
+        "follow_up_if_match": "Good - launch params (BLOCK_SIZE, grid), tl.load/tl.store memory hints, and (often) autotune configs.",
+        "follow_up_if_miss": "Hint: Triton is Python + JIT. You pass BLOCK_SIZE / grid at launch, you use tl.load/tl.store instead of pointer math."
+      }
     },
     {
       "id": "triton_matmul",
@@ -509,7 +652,35 @@
       "compute_paths": [
         "runpod",
         "lambda_labs"
-      ]
+      ],
+      "command_prompts": {
+        "question": "Why is BLOCK_K (the K-dimension tile size) usually the autotune knob that matters most for matmul?",
+        "expected_answers": [
+          {
+            "pattern": "shared.*memory|register|reuse",
+            "response": "Right - BLOCK_K controls how many K-iterations share a tile of A and B. Bigger K = more reuse per byte loaded."
+          },
+          {
+            "pattern": "cache|memory.*bound|l2|bandwidth",
+            "response": "Right - too small K and you thrash the cache; too large and you spill registers. The sweet spot is bandwidth-bound."
+          }
+        ],
+        "common_misconceptions": [
+          {
+            "pattern": "bigger.*better|always.*max",
+            "response": "Not quite - bigger BLOCK_K is better until it spills registers or exceeds shared memory. The autotune finds the sweet spot."
+          }
+        ],
+        "expected_keywords": [
+          "block_k",
+          "k",
+          "tile",
+          "reuse",
+          "autotune"
+        ],
+        "follow_up_if_match": "Good - BLOCK_K controls A/B reuse per K-step. Autotune finds the sweet spot between cache hits and register pressure.",
+        "follow_up_if_miss": "Hint: BLOCK_K controls how many K iterations reuse a tile of A and B. Bigger = more reuse, until register pressure or shared memory caps it."
+      }
     },
     {
       "id": "triton_fused_softmax",
@@ -541,7 +712,35 @@
       "compute_paths": [
         "runpod",
         "lambda_labs"
-      ]
+      ],
+      "command_prompts": {
+        "question": "What does 'fused' save you compared to running 3 separate kernels?",
+        "expected_answers": [
+          {
+            "pattern": "memory.*round|materializ|read.*write",
+            "response": "Right - 3 separate kernels each round-trip the full tensor through global memory. Fused = one round-trip."
+          },
+          {
+            "pattern": "bandwidth|bytes|l2|hbm",
+            "response": "Right - softmax is memory-bound on the read+write of the full tensor. Removing 2 of the 3 round-trips saves 2x bandwidth."
+          }
+        ],
+        "common_misconceptions": [
+          {
+            "pattern": "flop|compute|kernel.*time",
+            "response": "Not quite - softmax is memory-bound, not compute-bound. The win is from removing 2 memory round-trips, not from saving FLOPs."
+          }
+        ],
+        "expected_keywords": [
+          "memory",
+          "bandwidth",
+          "round",
+          "trip",
+          "fused"
+        ],
+        "follow_up_if_match": "Good - fused softmax saves 2 memory round-trips. It's a memory-bandwidth win, not a FLOP win.",
+        "follow_up_if_miss": "Hint: 3 separate kernels = 3 round-trips through global memory. Fused = 1 round-trip. The win is bandwidth, not FLOPs."
+      }
     },
     {
       "id": "triton_attention_draft",
@@ -632,7 +831,35 @@
       "compute_paths": [
         "runpod",
         "lambda_labs"
-      ]
+      ],
+      "deliverable_prompts": {
+        "question": "What 2-3 numbers belong in the 'speedup vs raw CUDA' section of your Triton synthesis?",
+        "expected_answers": [
+          {
+            "pattern": "vector|matmul|softmax|fused|kernel",
+            "response": "Right - the 3 Triton kernels (vector add, matmul, fused softmax) each get a row in the comparison."
+          },
+          {
+            "pattern": "\\bms\\b|microsecond|second|gb/s|bandwidth",
+            "response": "Right - the numbers are kernel time (ms) and achieved bandwidth (GB/s) for both the Triton and raw CUDA versions, per kernel."
+          }
+        ],
+        "common_misconceptions": [
+          {
+            "pattern": "always faster|2x|10x|magic",
+            "response": "Not quite - Triton isn't always faster. Fused softmax is usually a clear win; vector add is often similar to raw CUDA; matmul depends on the autotune config."
+          }
+        ],
+        "expected_keywords": [
+          "vector",
+          "matmul",
+          "softmax",
+          "ms",
+          "bandwidth"
+        ],
+        "follow_up_if_match": "Good - 3 kernels, 2 versions each, 2 metrics each. That's the comparison table.",
+        "follow_up_if_miss": "Hint: there are 3 Triton kernels (vector add, matmul, fused softmax). For each, you compare against raw CUDA on 2 metrics: kernel time and achieved bandwidth."
+      }
     },
     {
       "id": "llm_env_setup",
@@ -666,7 +893,34 @@
         "google_colab",
         "kaggle_notebooks",
         "runpod"
-      ]
+      ],
+      "command_prompts": {
+        "question": "What 2 things do you need to verify after the install?",
+        "expected_answers": [
+          {
+            "pattern": "transformers|model.*load|import",
+            "response": "Right - verify transformers imports and a small model loads. The .from_pretrained call also downloads and caches weights."
+          },
+          {
+            "pattern": "cuda|device|gpu.*available|torch",
+            "response": "Right - verify the model lands on CUDA. A model that loads to CPU is 'working' but not 'GPU-working'."
+          }
+        ],
+        "common_misconceptions": [
+          {
+            "pattern": "fast|quick|done",
+            "response": "Not quite - 'imports' is not the same as 'works on GPU'. The .to('cuda') call is the actual proof."
+          }
+        ],
+        "expected_keywords": [
+          "transformers",
+          "cuda",
+          "gpu",
+          "model"
+        ],
+        "follow_up_if_match": "Good - import works, model lands on CUDA. Both checks are needed.",
+        "follow_up_if_miss": "Hint: 2 checks. (1) transformers + a small model loads. (2) The model lands on the GPU, not the CPU."
+      }
     },
     {
       "id": "llm_first_generation",
@@ -903,7 +1157,34 @@
       "compute_paths": [
         "google_colab",
         "unsloth"
-      ]
+      ],
+      "command_prompts": {
+        "question": "What does bitsandbytes' int8 quantization actually change about the model?",
+        "expected_answers": [
+          {
+            "pattern": "weight|linear|matmul",
+            "response": "Right - the linear layer weights are stored as int8. The forward pass dequants on-the-fly during the matmul."
+          },
+          {
+            "pattern": "memory|bandwidth|footprint",
+            "response": "Right - the 4x weight-size reduction cuts the memory bandwidth needed to load the model, which speeds up decode."
+          }
+        ],
+        "common_misconceptions": [
+          {
+            "pattern": "compute|faster.*flop|kernel",
+            "response": "Not quite - int8 doesn't make the compute faster; the dequant is added work. The win is memory bandwidth, which dominates decode."
+          }
+        ],
+        "expected_keywords": [
+          "weight",
+          "int8",
+          "memory",
+          "bandwidth"
+        ],
+        "follow_up_if_match": "Good - int8 quantizes the linear-layer weights. Win is memory bandwidth on decode, not compute speed.",
+        "follow_up_if_miss": "Hint: only the linear-layer weights are int8. The forward pass dequants on the fly. The win is weight-load bandwidth, not FLOPs."
+      }
     },
     {
       "id": "llm_inference_report",
@@ -935,7 +1216,36 @@
       "compute_paths": [
         "runpod",
         "lambda_labs"
-      ]
+      ],
+      "deliverable_prompts": {
+        "question": "What 4 sections does your LLM inference synthesis need?",
+        "expected_answers": [
+          {
+            "pattern": "first.*generation|ttft|latency",
+            "response": "Right - 'first generation' covers the TTFT measurement and what dominated the wall-clock (prefill vs decode vs memory)."
+          },
+          {
+            "pattern": "kv.*cache|profile|memory|growth",
+            "response": "Right - 'KV cache' covers the profile of prefill vs decode and how the cache grows with sequence length."
+          }
+        ],
+        "common_misconceptions": [
+          {
+            "pattern": "model.*size|parameter|7b|13b",
+            "response": "Not quite - the synthesis is about runtime behavior (TTFT, decode latency, KV growth, serving patterns), not model architecture choices."
+          }
+        ],
+        "expected_keywords": [
+          "generation",
+          "kv",
+          "cache",
+          "decode",
+          "prefill",
+          "serving"
+        ],
+        "follow_up_if_match": "Good - 4 sections: first generation, KV cache profile, decoding, serving patterns.",
+        "follow_up_if_miss": "Hint: the 4 sections mirror the 4 inference tasks - first generation, KV cache profile, decoding, and serving patterns."
+      }
     },
     {
       "id": "serving_vllm_setup",
@@ -967,7 +1277,34 @@
       "compute_paths": [
         "runpod",
         "lambda_labs"
-      ]
+      ],
+      "command_prompts": {
+        "question": "What 2 things do you need to verify after the vLLM install?",
+        "expected_answers": [
+          {
+            "pattern": "server|run|launch|port|curl",
+            "response": "Right - bring up the server (default port 8000) and curl /v1/models to confirm it's listening."
+          },
+          {
+            "pattern": "chat|complet|response|generate",
+            "response": "Right - send a test completion (OpenAI-compatible /v1/chat/completions) to confirm the model is actually loaded and serving tokens."
+          }
+        ],
+        "common_misconceptions": [
+          {
+            "pattern": "just.*install|just.*import",
+            "response": "Not quite - 'imports cleanly' is not the same as 'serves tokens'. vLLM needs the model loaded and the server bound to a port."
+          }
+        ],
+        "expected_keywords": [
+          "server",
+          "curl",
+          "complet",
+          "chat"
+        ],
+        "follow_up_if_match": "Good - server up + curl /v1/chat/completions returns tokens. Two different checks.",
+        "follow_up_if_miss": "Hint: 2 checks. (1) Server is up on the port. (2) A test completion returns generated tokens (not an error)."
+      }
     },
     {
       "id": "serving_first_request",
@@ -1081,7 +1418,35 @@
       "compute_paths": [
         "runpod",
         "lambda_labs"
-      ]
+      ],
+      "command_prompts": {
+        "question": "What problem does PagedAttention solve that raw-transformers KV-cache management has?",
+        "expected_answers": [
+          {
+            "pattern": "fragment|reserv|waste|over.?allocat",
+            "response": "Right - raw transformers over-reserves a contiguous KV cache per request (worst-case length). Most requests don't hit that length, so memory is wasted."
+          },
+          {
+            "pattern": "page|block|non.?contigu",
+            "response": "Right - PagedAttention stores the KV cache in non-contiguous blocks (pages), like OS virtual memory. Requests only pay for what they use."
+          }
+        ],
+        "common_misconceptions": [
+          {
+            "pattern": "faster.*kernel|flash|attention.*fast",
+            "response": "Not quite - PagedAttention isn't a kernel optimization. It's a memory-management technique. FlashAttention is a separate (and complementary) win."
+          }
+        ],
+        "expected_keywords": [
+          "fragment",
+          "page",
+          "block",
+          "kv",
+          "cache"
+        ],
+        "follow_up_if_match": "Good - PagedAttention fixes the per-request KV-cache over-reservation by storing in non-contiguous pages.",
+        "follow_up_if_miss": "Hint: it's about memory management, not kernel speed. Raw transformers waste memory by over-reserving contiguous KV per request."
+      }
     },
     {
       "id": "serving_streaming",
@@ -1172,7 +1537,35 @@
       "compute_paths": [
         "runpod",
         "lambda_labs"
-      ]
+      ],
+      "command_prompts": {
+        "question": "What's the 'continuous batching' win over static batching?",
+        "expected_answers": [
+          {
+            "pattern": "wait|stall|idle|short.*long",
+            "response": "Right - in static batching, the next batch doesn't start until the slowest request finishes. Short requests sit idle waiting."
+          },
+          {
+            "pattern": "iter|step|swap|replace",
+            "response": "Right - continuous batching swaps finished requests out mid-step and slots new ones in, so the GPU is always busy."
+          }
+        ],
+        "common_misconceptions": [
+          {
+            "pattern": "more.*requests|higher.*throughput|magic",
+            "response": "Not quite - the throughput win comes from the GPU being always busy, not from 'more requests'. The mechanism is the swap-in / swap-out at each step."
+          }
+        ],
+        "expected_keywords": [
+          "continuous",
+          "batching",
+          "swap",
+          "iter",
+          "step"
+        ],
+        "follow_up_if_match": "Good - continuous batching swaps finished requests out mid-step so the GPU is always busy. Static batching makes short requests wait for the slowest.",
+        "follow_up_if_miss": "Hint: in static batching, the whole batch waits for the slowest request. Continuous batching swaps in new requests at every step."
+      }
     },
     {
       "id": "serving_systems_report",
@@ -1202,7 +1595,35 @@
       "compute_paths": [
         "runpod",
         "lambda_labs"
-      ]
+      ],
+      "deliverable_prompts": {
+        "question": "What 3 things distinguish a vLLM-served deployment from a raw-transformers deployment?",
+        "expected_answers": [
+          {
+            "pattern": "paged.*attention|kv.*page|memory.*block",
+            "response": "Right - PagedAttention is the vLLM-specific innovation; it eliminates the per-request KV-cache reservation."
+          },
+          {
+            "pattern": "continuous.*batching|in.?flight|batch",
+            "response": "Right - continuous batching lets vLLM add new requests to a running batch instead of waiting for the full batch to finish."
+          }
+        ],
+        "common_misconceptions": [
+          {
+            "pattern": "faster.*kernel|flashattention|cuda.*graph",
+            "response": "Not quite - those optimizations exist in raw transformers too. vLLM's wins are PagedAttention + continuous batching, not kernels."
+          }
+        ],
+        "expected_keywords": [
+          "paged",
+          "continuous",
+          "batching",
+          "kv",
+          "cache"
+        ],
+        "follow_up_if_match": "Good - PagedAttention, continuous batching, and (usually) tensor parallelism are the 3 distinguishing features.",
+        "follow_up_if_miss": "Hint: the 3 vLLM-specific features are PagedAttention, continuous batching, and (optionally) tensor parallelism. Raw transformers has none of these."
+      }
     },
     {
       "id": "distill_quant_int8_baseline",
@@ -1234,7 +1655,34 @@
       "compute_paths": [
         "google_colab",
         "runpod"
-      ]
+      ],
+      "command_prompts": {
+        "question": "What does PTQ (post-training quantization) preserve vs change?",
+        "expected_answers": [
+          {
+            "pattern": "weight|precision|int8|fp16",
+            "response": "Right - PTQ changes only the weight storage (fp16 -> int8). The forward pass is the same shape; just with dequant on the fly."
+          },
+          {
+            "pattern": "no.*train|recalibrat|frozen",
+            "response": "Right - PTQ is a single calibration pass on a small dataset. No gradient updates, no retraining. The model is frozen."
+          }
+        ],
+        "common_misconceptions": [
+          {
+            "pattern": "fine.?tune|retrain|gradient",
+            "response": "Not quite - that's QAT (quantization-aware training). PTQ is one calibration pass + freeze, no gradients."
+          }
+        ],
+        "expected_keywords": [
+          "weight",
+          "calibrat",
+          "no.*train",
+          "frozen"
+        ],
+        "follow_up_if_match": "Good - PTQ changes only the weight storage, with a single calibration pass. No gradients.",
+        "follow_up_if_miss": "Hint: PTQ = one calibration pass on a small dataset + freeze. No retraining. If there's retraining, it's QAT (a different technique)."
+      }
     },
     {
       "id": "distill_lora_finetune",
@@ -1268,7 +1716,34 @@
       "compute_paths": [
         "runpod",
         "lambda_labs"
-      ]
+      ],
+      "command_prompts": {
+        "question": "Why is LoRA 'cheap' compared to full fine-tuning?",
+        "expected_answers": [
+          {
+            "pattern": "rank|low.*rank|small|subset",
+            "response": "Right - LoRA adds a low-rank adapter (rank ~4-64) per linear layer, instead of updating the full weight matrix."
+          },
+          {
+            "pattern": "few.*param|parameter.*count|trainable",
+            "response": "Right - a 7B model with LoRA r=16 trains <1% of the parameters. The base weights are frozen."
+          }
+        ],
+        "common_misconceptions": [
+          {
+            "pattern": "faster.*always|universal|works.*anywhere",
+            "response": "Not quite - LoRA is cheap per step, but the quality ceiling is lower than full fine-tuning for big domain shifts. It's a trade, not a free lunch."
+          }
+        ],
+        "expected_keywords": [
+          "low.*rank",
+          "frozen",
+          "small",
+          "subset"
+        ],
+        "follow_up_if_match": "Good - LoRA adds a small low-rank adapter per layer. The base weights are frozen. <1% trainable params for a 7B model.",
+        "follow_up_if_miss": "Hint: 'low-rank' = small adapter matrix per linear layer. Base weights frozen. Cheap = few trainable params, not 'free quality'."
+      }
     },
     {
       "id": "distill_teacher_student_train",
@@ -1300,7 +1775,34 @@
       "compute_paths": [
         "runpod",
         "lambda_labs"
-      ]
+      ],
+      "command_prompts": {
+        "question": "What is the student trying to match in logit-KD (vs output-KD)?",
+        "expected_answers": [
+          {
+            "pattern": "logit|soft.*target|distribution|probabilit",
+            "response": "Right - logit-KD matches the teacher's full output distribution (the soft probabilities, including the 'almost-right' tokens)."
+          },
+          {
+            "pattern": "hard.*label|one.*hot|argmax",
+            "response": "Right - output-KD matches just the argmax (the hard label). Logit-KD is richer because it includes the teacher's uncertainty."
+          }
+        ],
+        "common_misconceptions": [
+          {
+            "pattern": "same.*thing|equivalent|no.*difference",
+            "response": "Not quite - logit-KD carries the teacher's uncertainty ('the next token is 60% probably A but also 30% B and 10% C'). Output-KD loses that signal."
+          }
+        ],
+        "expected_keywords": [
+          "logit",
+          "soft",
+          "distribution",
+          "teacher"
+        ],
+        "follow_up_if_match": "Good - logit-KD matches the full soft distribution. Output-KD only matches the argmax. The soft signal is the rich part.",
+        "follow_up_if_miss": "Hint: logit-KD = match the teacher's full output distribution (the soft probs). Output-KD = match just the top token. The soft signal is the teacher's uncertainty."
+      }
     },
     {
       "id": "distill_eval_compare",
@@ -1390,7 +1892,34 @@
       "compute_paths": [
         "google_colab",
         "unsloth"
-      ]
+      ],
+      "command_prompts": {
+        "question": "What does int4 buy you that int8 doesn't?",
+        "expected_answers": [
+          {
+            "pattern": "memory|footprint|size",
+            "response": "Right - int4 halves the weight storage again. A 7B model in int4 is ~3.5GB instead of ~7GB."
+          },
+          {
+            "pattern": "bandwidth|memory.*bound|long.*context",
+            "response": "Right - the smaller weight footprint lets the GPU load weights faster, which matters more on long-context decode where the model is the bandwidth ceiling."
+          }
+        ],
+        "common_misconceptions": [
+          {
+            "pattern": "accuracy|quality|no.*loss",
+            "response": "Not quite - int4 has noticeable quality loss on most models. It's a 'size matters more than 1% accuracy' trade."
+          }
+        ],
+        "expected_keywords": [
+          "memory",
+          "weight",
+          "size",
+          "bandwidth"
+        ],
+        "follow_up_if_match": "Good - int4 halves the weight size again. Useful when memory is the ceiling, but you trade some accuracy.",
+        "follow_up_if_miss": "Hint: int4 = half the int8 weight size. Useful when model size / memory bandwidth is the ceiling. Not free on accuracy."
+      }
     },
     {
       "id": "distill_synthesis_report",
@@ -1419,7 +1948,35 @@
         "google_colab",
         "kaggle_notebooks",
         "runpod"
-      ]
+      ],
+      "deliverable_prompts": {
+        "question": "When does each distillation method (int8, LoRA, logit KD, int4) beat the others on throughput?",
+        "expected_answers": [
+          {
+            "pattern": "int8.*bandwidth|memory.*bound|weight.*load",
+            "response": "Right - int8 wins on memory-bound workloads (LLM decode, large context) because the weight-load bandwidth drops 4x."
+          },
+          {
+            "pattern": "lora.*fine.?tune|adapt|domain",
+            "response": "Right - LoRA wins on adaptation cost: cheap fine-tunes for new domains without retraining the full model."
+          }
+        ],
+        "common_misconceptions": [
+          {
+            "pattern": "int8.*always|always.*int8|fastest",
+            "response": "Not quite - int8 helps memory-bound workloads but can hurt compute-bound ones through dequant overhead. It's not universally faster."
+          }
+        ],
+        "expected_keywords": [
+          "int8",
+          "lora",
+          "logit",
+          "kd",
+          "int4"
+        ],
+        "follow_up_if_match": "Good - the 4 methods trade off across memory, compute, adaptation, and quality. Each has a workload class where it's best.",
+        "follow_up_if_miss": "Hint: think about which bottleneck each method attacks. int8 -> memory bandwidth, LoRA -> adaptation, logit KD -> quality, int4 -> extreme memory pressure."
+      }
     }
   ],
   "tracks": {

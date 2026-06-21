@@ -44,13 +44,13 @@ Some tasks additionally require:
 | `gpu next`     | Show the next pending task. |
 | `gpu status`   | Progress bar + current task + tracks + skill tree + Pending panel + Next-hint line + Last-activity line + Next-milestone line. |
 | `gpu skills`   | Skill tree only. |
-| `gpu done <id> [--bench <path>]` | Mark task complete (prompts for bottleneck -> bottleneck follow-up (when the task has one) -> reality check -> bench summary -> teaching; attach a benchmark artifact with `--bench`). |
+| `gpu done <id> [--bench <path>]` | Mark task complete (prompts for bottleneck -> bottleneck follow-up -> reality check -> bench summary -> deliverable (when the task has one) -> command walkthrough (when the task has one) -> teaching; attach a benchmark artifact with `--bench`). |
 | `gpu resources` | List roadmap resources (papers, libraries, tools), with `--domain`, `--tag`, `--difficulty` filters and `--open <id>`. Use `--domain compute` to see platforms. |
 | `gpu compute`  | Show where to run GPU tasks (compute platforms with Good-for / Not-good-for columns; `--open <id>` launches a URL). |
 | `gpu score` | Show weighted program + per-track + per-milestone score. |
 | `gpu check`    | Run a pending reality check on demand. |
 | `gpu teach <id> [--llm]`	| Run the interactive teaching flow for a task (multi-step prompts with hand-coded feedback; `--llm` adds an LLM feedback line if `OPENAI_API_KEY` is set; v0.20: streamed when fresh, `(cached)` / `(fresh)` / `(live)` tag, `GPU_LLM_MODEL` env var selects from a 4-model allowlist, `GPU_LLM_NO_CACHE=1` bypasses the response cache). |
-| `gpu explain`  | Show recorded bottleneck + reality-check + benchmark + bottleneck follow-up + teaching log. |
+| `gpu explain`  | Show recorded bottleneck + reality-check + benchmark + bottleneck follow-up + deliverable + command walkthrough + teaching log. |
 | `gpu tasks`    | List all task ids with completion marks. |
 | `gpu reset`    | Wipe all progress (asks first). |
 
@@ -127,6 +127,7 @@ This project was built bottom-up so you can ship each version on its own:
 | v0.20 | Richer LLM feedback: `GPU_LLM_MODEL` env var (allowlist of 4) + response cache (`storage.llm_cache`) + streaming + (cached/fresh/live) tag (Candidate A from issue #4) | done |
 | v0.21 | Bottleneck follow-up prompts on 8/9 `bottleneck_pick` tasks (reality_check-style teaching for the bottleneck step + `misconception_hit` flag) (Candidate A from issue #5) | done |
 | v0.22 | Real test framework: pytest + `tests/` + GitHub Actions CI on push (110 unit tests, 15+ units covered) (Candidate A from issue #6) | done |
+| v0.23 | Two new teaching surfaces: `deliverable_prompts` (5 report tasks) + `command_prompts` (15 install/measure tasks) using the v0.18 layered schema. 32/32 tasks now have a teaching loop. | done |
 
 ## Tracks
 
