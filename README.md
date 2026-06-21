@@ -40,9 +40,10 @@ Some tasks additionally require:
 
 | Command           | Purpose |
 |-------------------|---------|
-| `gpu start`    | First run: full walkthrough (welcome, what this is, shape, commands, first task). Later runs: quiet. |
+| `gpu start`    | First run: full walkthrough (welcome, what this is, shape, commands, first task). Later runs: quiet. Pass `--interactive` / `-i` for a paced walkthrough with Y/n gates between panels (graceful degradation on non-TTY stdin). |
 | `gpu next`     | Show the next pending task. |
 | `gpu status`   | Progress bar + current task + tracks + skill tree + Pending panel + Next-hint line + Last-activity line + Next-milestone line. |
+| `gpu doctor`   | One-screen environment checks: Python version, typer/rich imports, roadmap.json, storage.json writability, optional torch+CUDA, compute-platform count. Exits 0 on healthy, 1 on failure, prints warnings (informational) for optional bits. |
 | `gpu skills`   | Skill tree only. |
 | `gpu done <id> [--bench <path>]` | Mark task complete (prompts for bottleneck -> bottleneck follow-up -> reality check -> bench summary -> deliverable (when the task has one) -> command walkthrough (when the task has one) -> teaching; attach a benchmark artifact with `--bench`). |
 | `gpu resources` | List roadmap resources (papers, libraries, tools), with `--domain`, `--tag`, `--difficulty` filters and `--open <id>`. Use `--domain compute` to see platforms. |
@@ -130,6 +131,7 @@ This project was built bottom-up so you can ship each version on its own:
 | v0.23 | Two new teaching surfaces: `deliverable_prompts` (5 report tasks) + `command_prompts` (15 install/measure tasks) using the v0.18 layered schema. 32/32 tasks now have a teaching loop. | done |
 | v0.24 | Week 6 curriculum: `parallel` track (4 tasks: `sharding_intro`, `tensor_parallel_demo`, `pipeline_parallel_demo`, `parallel_scaling_report`) + 3 new skills (`parallel_strategies`, `tensor_parallelism`, `pipeline_parallelism`) + 1 new milestone (`parallel_strategies_week6`). 36/36 tasks. 100% teaching coverage. (Candidate A from issue #7) | done |
 | v0.25 | Week 7 multi-GPU serving: 4 new tasks on the `systems` track (`vllm_tp_attention`, `sglang_radix_cache`, `disagg_prefill_decode`, `serving_synthesis_report_v2`) + 2 new skills (`vllm_serving`, `disaggregated_inference`). GPU Serving milestone grew from 6 to 10 tasks. 40/40 tasks. (Candidate A from issue #9) | done |
+| v0.26 | CLI polish: `gpu doctor` (one-screen env checks: Python, deps, storage writability, roadmap, optional torch/CUDA) + `gpu start --interactive` (paced walkthrough with Y/n gates between panels). No new commands on `done`/`status`/`score` paths; the existing flows are untouched. 140/140 tests. | done |
 
 ## Tracks
 

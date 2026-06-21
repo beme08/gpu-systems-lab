@@ -365,20 +365,37 @@ def render_tracks(roadmap: Dict[str, Any], completed: List[str]) -> None:
         console.print(f"  {title:<{name_w}} {bar} {done}/{total}  {pct:5.1f}%")
 
 
-def render_walkthrough(roadmap: Dict[str, Any], storage: Dict[str, Any]) -> None:
+def render_walkthrough(roadmap: Dict[str, Any], storage: Dict[str, Any], interactive: bool = False) -> None:
     """First-run orientation: program, shape, commands, first task.
 
     Designed to be shown exactly once per install. Re-running ``gpu start``
     after the first run is intentionally quiet - the user already saw this.
+
+    With ``interactive=True``, prompts the user to press Enter between
+    panels so they can read each section at their own pace. Default
+    (interactive=False) is the single-screen flow.
     """
+
+    def _gate(label: str) -> None:
+        """Pause between panels in interactive mode; no-op otherwise."""
+        if not interactive:
+            return
+        try:
+            typer.confirm(f"  -> continue to {label}?", default=True)
+        except (typer.Abort, EOFError):
+            # Non-interactive stdin (e.g. CI); fall back to the non-interactive flow.
+            pass
+
     # 1. Welcome panel
     console.print(Panel(
         f"[bold]{roadmap.get('program', '?')}[/bold]\n\n{roadmap.get('goal', '')}",
         title="Welcome",
         border_style="green",
     ))
+    _gate('"What this is"')
 
     # 2. What this is
+    _gate('"Shape of the program"')
     console.print(Panel(
         "This is not a checklist. It is a small simulator for how an AI "
         "Systems Engineer thinks:\n\n"
@@ -395,6 +412,7 @@ def render_walkthrough(roadmap: Dict[str, Any], storage: Dict[str, Any]) -> None
     ))
 
     # 3. Shape of the program
+    _gate('"Commands you will use"')
     tracks_meta = roadmap.get("tracks") or {}
     milestones = roadmap.get("milestones") or {}
     tasks = roadmap.get("tasks") or []
@@ -419,10 +437,11 @@ def render_walkthrough(roadmap: Dict[str, Any], storage: Dict[str, Any]) -> None
     cmds = Table(show_header=False, box=None, padding=(0, 2))
     cmds.add_column(style="cyan", no_wrap=True)
     cmds.add_column(style="white")
-    cmds.add_row("gpu start",   "begin the program, show the first task (this view)")
+    cmds.add_row("gpu start",   "begin the program (pass --interactive for a paced first-run walkthrough); show the first task")
     cmds.add_row("gpu next",    "show the next pending task")
     cmds.add_row("gpu status",  "progress bar, current task, tracks, skill tree")
     cmds.add_row("gpu skills",  "skill tree only")
+    cmds.add_row("gpu doctor", "environment checks: Python version, deps, storage writability, optional torch/CUDA detection")
     cmds.add_row("gpu done <id> [--bench <path>]", "mark a task complete (prompts for bottleneck / reality when needed; --bench attaches a benchmark artifact)")
     cmds.add_row("gpu check",   "run a pending reality check on demand")
     cmds.add_row("gpu explain", "show recorded bottleneck + reality-check + benchmark log")
@@ -437,6 +456,7 @@ def render_walkthrough(roadmap: Dict[str, Any], storage: Dict[str, Any]) -> None
     console.print(
         f"[bold magenta]{_next_milestone_line(roadmap, storage.get('completed') or [])}[/bold magenta]"
     )
+    _gate('the first task')
 
     # 5. First task
     first = next_task(tasks, storage.get("completed") or [])
@@ -1135,28 +1155,36 @@ def prompt_teaching(
 
 @app.command()
 def start(
+    interactive: bool = typer.Option(
+        False,
+        "--interactive",
+        "-i",
+        help="Walk through each panel of the first-run orientation one at a time, with a Y/n prompt between panels.",
+    ),
 ):
     """Begin the program and walk you through what is next.
 
     First run: shows the full walkthrough (welcome, what this is, shape of
     the program, command list, first task). Subsequent runs: stay quiet
     and just show the current task - use `gpu next` for that.
+
+    Pass --interactive for a paced walkthrough that pauses between panels
+    (handy for first-time users who want to read each section before
+    moving on). Default is the original single-screen flow.
     """
     roadmap = load_roadmap()
     data = load_storage()
 
+    show_walkthrough = False
     if not data["started"]:
         data["started"] = True
-        render_walkthrough(roadmap, data)
-        data["welcomed"] = True
-        save_storage(data)
-        return
-
-    # Already started.
-    if not data.get("welcomed"):
+        show_walkthrough = True
+    elif not data.get("welcomed"):
         # started was set in an earlier version of the tool (no welcomed
         # key was ever written). Show the walkthrough once and remember.
-        render_walkthrough(roadmap, data)
+        show_walkthrough = True
+    if show_walkthrough:
+        render_walkthrough(roadmap, data, interactive=interactive)
         data["welcomed"] = True
         save_storage(data)
         return
@@ -1202,6 +1230,94 @@ def status(
     console.print(f"[bold cyan]Next:[/bold cyan] {_next_hint(roadmap, data)}")
     console.print(f"[dim]{_last_activity_line(data)}[/dim]")
     console.print(f"[bold magenta]{_next_milestone_line(roadmap, data['completed'])}[/bold magenta]")
+
+
+@app.command()
+def doctor(
+):
+    """Run environment checks: Python, deps, storage writability, roadmap, optional torch/CUDA.
+
+    Exits 0 if everything is healthy, 1 if any check fails. Designed to
+    give a one-screen summary of "is this install ready to use?" so a
+    new user (or a CI pipeline) can spot missing pieces without reading
+    a stack trace.
+    """
+    findings: list[tuple[str, str, str]] = []  # (status, label, detail)
+    # status: "ok" | "warn" | "fail"
+
+    # 1. Python version
+    py = sys.version_info
+    py_str = f"{py.major}.{py.minor}.{py.micro}"
+    if (py.major, py.minor) >= (3, 8):
+        findings.append(("ok", "Python", f"{py_str}"))
+    else:
+        findings.append(("fail", "Python", f"{py_str} (need >= 3.8)"))
+
+    # 2. Required runtime deps
+    for mod_name in ("typer", "rich"):
+        try:
+            __import__(mod_name)
+            findings.append(("ok", f"dep:{mod_name}", "imported"))
+        except ImportError:
+            findings.append(("fail", f"dep:{mod_name}", "not installed; run `pip install -e .`"))
+
+    # 3. Roadmap
+    try:
+        rm = load_roadmap()
+        n_tasks = len(rm.get("tasks") or [])
+        findings.append(("ok", "roadmap.json", f"{n_tasks} tasks"))
+    except Exception as e:  # noqa: BLE001
+        findings.append(("fail", "roadmap.json", f"{type(e).__name__}: {e}"))
+
+    # 4. Storage
+    try:
+        d = load_storage()
+        findings.append(("ok", "storage.json", f"writable at {STORAGE_PATH}"))
+    except Exception as e:  # noqa: BLE001
+        findings.append(("fail", "storage.json", f"{type(e).__name__}: {e}"))
+
+    # 5. Optional: torch + CUDA (informational, not a fail)
+    try:
+        import torch  # type: ignore
+        cuda_avail = bool(torch.cuda.is_available())
+        if cuda_avail:
+            dev = torch.cuda.get_device_name(0)
+            findings.append(("ok", "torch + CUDA", f"{torch.__version__}, device: {dev}"))
+        else:
+            findings.append(("warn", "torch + CUDA", f"torch {torch.__version__} installed, but CUDA is not available; the curriculum still works, but GPU tasks need Colab/Kaggle/RunPod per `gpu compute`"))
+    except ImportError:
+        findings.append(("warn", "torch + CUDA", "torch not installed (optional); the curriculum still works, but GPU tasks need Colab/Kaggle/RunPod per `gpu compute`"))
+
+    # 6. Compute-resources field (v0.14 contract)
+    try:
+        rm = load_roadmap()
+        n_compute = sum(1 for r in rm.get("resources", []) if "compute" in r.get("domains", []))
+        if n_compute >= 1:
+            findings.append(("ok", "compute resources", f"{n_compute} platform(s) declared; `gpu compute` will work"))
+        else:
+            findings.append(("warn", "compute resources", "no resources tagged with `compute`; `gpu compute` will be empty"))
+    except Exception as e:  # noqa: BLE001
+        findings.append(("fail", "compute resources", f"{type(e).__name__}: {e}"))
+
+    # Render
+    table = Table(show_header=True, box=None, padding=(0, 2))
+    table.add_column("Status", no_wrap=True)
+    table.add_column("Check", style="cyan", no_wrap=True)
+    table.add_column("Detail", style="white")
+    style_map = {"ok": "[green]OK[/green]", "warn": "[yellow]WARN[/yellow]", "fail": "[red]FAIL[/red]"}
+    for status, label, detail in findings:
+        table.add_row(style_map[status], label, detail)
+    console.print(table)
+
+    failed = sum(1 for s_ in findings if s_[0] == "fail")
+    warned = sum(1 for s_ in findings if s_[0] == "warn")
+    if failed:
+        console.print(f"[red]{failed} check(s) failed. See above.[/red]")
+        raise typer.Exit(1)
+    if warned:
+        console.print(f"[yellow]{warned} check(s) warned (informational). The CLI is still usable.[/yellow]")
+        return
+    console.print("[green]All checks passed. The CLI is ready to use.[/green]")
 
 
 @app.command()
