@@ -11,11 +11,11 @@ def test_fresh_storage_pending_counts():
     roadmap = gpu.load_roadmap()
     data = gpu.default_storage(roadmap)
     counts = gpu._count_pending_prompts(roadmap, data)
-    # The real curriculum has 4 reality_check tasks (v0.19) and 11
-    # bottleneck_pick tasks (v0.21 + v0.24: 9 + 2 new parallel demos).
+    # The real curriculum has 4 reality_check tasks (v0.19) and 13
+    # bottleneck_pick tasks (v0.21 + v0.24 + v0.25: 9 + 2 parallel + 2 multi-GPU).
     # None are completed, so all are pending.
     assert counts["reality"] == 4
-    assert counts["bottleneck"] == 11
+    assert counts["bottleneck"] == 13
     # bench_attachable is 0 because no tasks are completed yet
     assert counts["bench"] == 0
 
@@ -30,7 +30,7 @@ def test_completed_tasks_reduce_pending():
     # counts should not change from the fresh-storage case
     counts = gpu._count_pending_prompts(roadmap, data)
     assert counts["reality"] == 4
-    assert counts["bottleneck"] == 11
+    assert counts["bottleneck"] == 13
 
 
 def test_answering_reality_reduces_pending():
@@ -40,7 +40,7 @@ def test_answering_reality_reduces_pending():
     data["reality"]["vector_add"] = "memory bound"
     counts = gpu._count_pending_prompts(roadmap, data)
     assert counts["reality"] == 3
-    assert counts["bottleneck"] == 11
+    assert counts["bottleneck"] == 13
 
 
 def test_recording_bottleneck_reduces_pending():
@@ -50,7 +50,7 @@ def test_recording_bottleneck_reduces_pending():
     data["bottlenecks"]["bandwidth_test"] = "compute_bound"
     counts = gpu._count_pending_prompts(roadmap, data)
     assert counts["reality"] == 4
-    assert counts["bottleneck"] == 10
+    assert counts["bottleneck"] == 12
 
 
 def test_bench_attachable_counts_completed_without_benchmark():

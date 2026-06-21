@@ -126,9 +126,10 @@ This project was built bottom-up so you can ship each version on its own:
 | v0.19 | More `teaching_prompts` coverage: `llm_batch_serving` + `serving_first_request` (reality-check teaching now 4/4) | done |
 | v0.20 | Richer LLM feedback: `GPU_LLM_MODEL` env var (allowlist of 4) + response cache (`storage.llm_cache`) + streaming + (cached/fresh/live) tag (Candidate A from issue #4) | done |
 | v0.21 | Bottleneck follow-up prompts on 8/9 `bottleneck_pick` tasks (reality_check-style teaching for the bottleneck step + `misconception_hit` flag) (Candidate A from issue #5) | done |
-| v0.22 | Real test framework: pytest + `tests/` + GitHub Actions CI on push (110 unit tests, 15+ units covered) (Candidate A from issue #6) | done |
+| v0.22 | Real test framework: pytest + `tests/` + GitHub Actions CI on push (pytest + 134 unit tests across 16 test files) (Candidate A from issue #6) | done |
 | v0.23 | Two new teaching surfaces: `deliverable_prompts` (5 report tasks) + `command_prompts` (15 install/measure tasks) using the v0.18 layered schema. 32/32 tasks now have a teaching loop. | done |
 | v0.24 | Week 6 curriculum: `parallel` track (4 tasks: `sharding_intro`, `tensor_parallel_demo`, `pipeline_parallel_demo`, `parallel_scaling_report`) + 3 new skills (`parallel_strategies`, `tensor_parallelism`, `pipeline_parallelism`) + 1 new milestone (`parallel_strategies_week6`). 36/36 tasks. 100% teaching coverage. (Candidate A from issue #7) | done |
+| v0.25 | Week 7 multi-GPU serving: 4 new tasks on the `systems` track (`vllm_tp_attention`, `sglang_radix_cache`, `disagg_prefill_decode`, `serving_synthesis_report_v2`) + 2 new skills (`vllm_serving`, `disaggregated_inference`). GPU Serving milestone grew from 6 to 10 tasks. 40/40 tasks. (Candidate A from issue #9) | done |
 
 ## Tracks
 
@@ -136,7 +137,7 @@ Tracks are declared in `roadmap.json` under the `tracks` key and shown
 in `gpu status` as a per-track progress panel between the current task
 and the skill tree. The CUDA track has Week 1 + Week 2 (Triton) tasks (14 total).
 The LLM track has Week 3 (LLM inference) tasks (6 total).
-The Systems track has Week 4 (GPU serving) tasks (6 total).
+The Systems track has Week 4 (GPU serving) + Week 7 (multi-GPU serving) tasks (10 total): basic serving setup, paged attention, streaming, batching, a 4-task single-GPU report, then vLLM TP, SGLang radix cache, disagg prefill/decode, and a 4-task multi-GPU synthesis.
 The Distillation track has Week 5 (distillation) tasks (6 total).
 The Parallel track has Week 6 (parallel strategies) tasks (4 total) -
 sharding_intro (read Megatron-LM sections 1-2), tensor_parallel_demo

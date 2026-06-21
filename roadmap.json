@@ -49,6 +49,14 @@
     {
       "id": "pipeline_parallelism",
       "name": "Pipeline Parallelism"
+    },
+    {
+      "id": "vllm_serving",
+      "name": "vLLM Serving Internals"
+    },
+    {
+      "id": "disaggregated_inference",
+      "name": "Disaggregated Inference"
     }
   ],
   "tasks": [
@@ -1597,7 +1605,9 @@
       "prerequisites": [
         "serving_batching_under_load"
       ],
-      "unlocks": [],
+      "unlocks": [
+        "vllm_tp_attention"
+      ],
       "milestone": "gpu_serving_track",
       "score": {
         "impact": 3,
@@ -2309,6 +2319,308 @@
         "follow_up_if_match": "Good - 3 sections: 3 strategy options, crossover points, your measurement table. The synthesis IS the crossover analysis.",
         "follow_up_if_miss": "Hint: 3 sections. (1) the 3 strategy options, (2) when each wins (crossover points), (3) your measured numbers from the demos."
       }
+    },
+    {
+      "id": "vllm_tp_attention",
+      "title": "Tensor-parallel attention in vLLM: TP=1 vs TP=2",
+      "mode": "GPU System Lab",
+      "constraint": "Two-GPU box (or TP=1 baseline)",
+      "objective": "Run vLLM with --tensor-parallel-size 2 on a 7B+ model. Measure TTFT and TPOT vs the same model with TP=1. Note where the per-token latency shifts.",
+      "commands": [
+        "python -m vllm.entrypoints.openai.api_server --model Qwen/Qwen2.5-7B-Instruct --tensor-parallel-size 2 --port 8000",
+        "python -c \"import time, requests, json; t=time.time(); r=requests.post('http://localhost:8000/v1/chat/completions', json={'model':'Qwen/Qwen2.5-7B-Instruct','messages':[{'role':'user','content':'Hello'}]}); print('TTFT', time.time()-t)\""
+      ],
+      "deliverable": "notes/vllm_tp_attention.md with TP=1 vs TP=2 TTFT and TPOT, and a 2-line note on why attention (not MLP) drives the TP win at small batch.",
+      "skills": {
+        "llm_systems": 10,
+        "tensor_parallelism": 10,
+        "vllm_serving": 5
+      },
+      "bottleneck_pick": true,
+      "track": "systems",
+      "prerequisites": [
+        "serving_systems_report"
+      ],
+      "unlocks": [
+        "sglang_radix_cache"
+      ],
+      "milestone": "gpu_serving_track",
+      "score": {
+        "impact": 4,
+        "depth": 4,
+        "reproducibility": 3
+      },
+      "compute_paths": [
+        "runpod",
+        "lambda_labs"
+      ],
+      "bottleneck_followup": {
+        "question": "Why does TP=2 win on attention but barely move the MLP forward pass?",
+        "expected_answers": [
+          {
+            "pattern": "\\b(attention|qk|kv|softmax)\\b",
+            "response": "Attention is GEMM-heavy on the head dimension and the QKV projections split cleanly across TP ranks; each rank only owns a slice of heads, so the per-rank FLOPs drop roughly linearly with TP."
+          },
+          {
+            "pattern": "\\b(all[\\-_ ]?reduce|allreduce|collective)\\b",
+            "response": "Yes - the TP all-reduce happens at the attention output. The latency cost is the collective itself, but for attention it's amortized across enough FLOPs to be a win."
+          }
+        ],
+        "common_misconceptions": [
+          {
+            "pattern": "\\b(mlp|ffn)\\b",
+            "response": "The MLP forward is also a GEMM, so why doesn't it scale? The MLP reduces inside the GeLU/RMSNorm and the row-parallel output is a reduction; the per-rank work doesn't shrink as cleanly as the head split in attention."
+          }
+        ],
+        "expected_keywords": [
+          "attention",
+          "head"
+        ],
+        "follow_up_if_match": "Right - head parallelism is the natural axis. What's the cost of the all-reduce at the end?",
+        "follow_up_if_miss": "Think about which axis of attention naturally splits: query/key/value heads. Then think about what happens at the output projection."
+      },
+      "command_prompts": {
+        "ask_before": [
+          {
+            "key": "model",
+            "question": "Which 7B+ model are you serving?",
+            "hint": "Pick one that fits your VRAM: Qwen2.5-7B, Llama-3.1-8B, Mistral-7B.",
+            "type": "free"
+          },
+          {
+            "key": "gpu_count",
+            "question": "How many GPUs are you running on?",
+            "hint": "TP=1 vs TP=2 requires at least 2 GPUs. Set 1 if you're only measuring the baseline.",
+            "type": "free"
+          }
+        ],
+        "ask_after": [
+          {
+            "key": "ttft_tp1",
+            "question": "What was your TTFT at TP=1 (seconds)?",
+            "hint": "Wall-clock from request send to first chunk.",
+            "type": "free"
+          },
+          {
+            "key": "ttft_tp2",
+            "question": "What was your TTFT at TP=2 (seconds)?",
+            "hint": "Same metric, --tensor-parallel-size 2.",
+            "type": "free"
+          },
+          {
+            "key": "tpot_tp1",
+            "question": "What was your TPOT at TP=1 (ms/token)?",
+            "hint": "Mean inter-chunk time across the response.",
+            "type": "free"
+          },
+          {
+            "key": "tpot_tp2",
+            "question": "What was your TPOT at TP=2 (ms/token)?",
+            "hint": "Same metric, --tensor-parallel-size 2.",
+            "type": "free"
+          }
+        ]
+      }
+    },
+    {
+      "id": "sglang_radix_cache",
+      "title": "SGLang radix cache: repeated-prefix hit rate",
+      "mode": "GPU System Lab",
+      "constraint": "SGLang runtime",
+      "objective": "Run SGLang with a workload that has a long repeated prefix (e.g. a system prompt + a few Q&A rounds). Measure the radix cache hit rate. Note when the hit rate drops.",
+      "commands": [
+        "python -m sglang.launch_server --model-path Qwen/Qwen2.5-7B-Instruct --port 30000",
+        "python -c \"import sglang; r=sglang.Runtime(model_path='Qwen/Qwen2.5-7B-Instruct'); print(r.generate('Hello'))\""
+      ],
+      "deliverable": "notes/sglang_radix_cache.md with the radix cache hit rate, and a 2-line note on why the prefix cache hits when prompts share a long system message and miss when the system prompt is short.",
+      "skills": {
+        "llm_systems": 10,
+        "vllm_serving": 5,
+        "profiling": 5
+      },
+      "track": "systems",
+      "prerequisites": [
+        "vllm_tp_attention"
+      ],
+      "unlocks": [
+        "disagg_prefill_decode"
+      ],
+      "milestone": "gpu_serving_track",
+      "score": {
+        "impact": 3,
+        "depth": 3,
+        "reproducibility": 3
+      },
+      "compute_paths": [
+        "runpod",
+        "lambda_labs"
+      ],
+      "command_prompts": {
+        "ask_before": [
+          {
+            "key": "prefix_len",
+            "question": "How long is your repeated system prefix (tokens)?",
+            "hint": "Try 512, 2048, 4096. Hit rate scales with shared prefix length.",
+            "type": "free"
+          }
+        ],
+        "ask_after": [
+          {
+            "key": "hit_rate",
+            "question": "What was your radix cache hit rate?",
+            "hint": "SGLang logs this in the server output. Aim for > 0.6 on a long-prefix workload.",
+            "type": "free"
+          },
+          {
+            "key": "dropped_why",
+            "question": "When did the hit rate drop, and why?",
+            "hint": "E.g. short system prompt, large user-message variance, eviction under memory pressure.",
+            "type": "free"
+          }
+        ]
+      }
+    },
+    {
+      "id": "disagg_prefill_decode",
+      "title": "Disaggregated prefill/decode: split the two phases",
+      "mode": "GPU System Lab",
+      "constraint": "Two-GPU box, disagg-capable serving stack",
+      "objective": "Run a serving stack with prefill and decode on separate GPUs (vLLM --disagg or equivalent). Measure aggregate throughput and TTFT vs the colocated baseline.",
+      "commands": [
+        "python -m vllm.entrypoints.openai.api_server --model Qwen/Qwen2.5-7B-Instruct --disagg-prefill-decode --prefill-gpu 0 --decode-gpu 1 --port 8000"
+      ],
+      "deliverable": "notes/disagg_prefill_decode.md with colocated vs disagg throughput and TTFT, and a 2-line note on why prefill and decode have different latency profiles (compute-bound vs memory-bound).",
+      "skills": {
+        "llm_systems": 10,
+        "vllm_serving": 5,
+        "disaggregated_inference": 10,
+        "tensor_parallelism": 5
+      },
+      "bottleneck_pick": true,
+      "track": "systems",
+      "prerequisites": [
+        "sglang_radix_cache"
+      ],
+      "unlocks": [
+        "serving_synthesis_report_v2"
+      ],
+      "milestone": "gpu_serving_track",
+      "score": {
+        "impact": 4,
+        "depth": 4,
+        "reproducibility": 2
+      },
+      "compute_paths": [
+        "runpod",
+        "lambda_labs"
+      ],
+      "bottleneck_followup": {
+        "question": "Why is prefill compute-bound and decode memory-bound, and what does that buy us by splitting them?",
+        "expected_answers": [
+          {
+            "pattern": "\\b(memory|bandwidth|hbm)\\b",
+            "response": "Decode is memory-bound: each step reads the full KV cache for one new token, doing O(1) FLOPs per token. Putting it on its own GPU keeps the HBM bandwidth dedicated to the decode loop."
+          },
+          {
+            "pattern": "\\b(compute|flop|tensor core)\\b",
+            "response": "Prefill is compute-bound: it processes the full prompt in parallel, so the SMs are the bottleneck. Giving prefill its own GPU means decode doesn't pause while a long prompt is filling the SMs."
+          }
+        ],
+        "common_misconceptions": [
+          {
+            "pattern": "\\b(pcie|nvlink|transfer)\\b",
+            "response": "The interconnect cost matters but it's not the dominant cost - the win is from the SMs (prefill) and HBM (decode) no longer contending for the same GPU."
+          }
+        ],
+        "expected_keywords": [
+          "memory",
+          "compute"
+        ],
+        "follow_up_if_match": "Right - decode is memory-bound on HBM, prefill is compute-bound on SMs. What's the per-token cost of the KV cache transfer between them?",
+        "follow_up_if_miss": "Think about what each phase actually does: prefill fills the KV cache in parallel (compute-bound on tensor cores); decode reads it one token at a time (memory-bound on HBM)."
+      },
+      "command_prompts": {
+        "ask_before": [
+          {
+            "key": "engine",
+            "question": "Which disagg-capable engine did you use?",
+            "hint": "vLLM (--disagg-prefill-decode), Mooncake, or DistServe. Each has a different setup story.",
+            "type": "free"
+          },
+          {
+            "key": "interconnect",
+            "question": "What GPU interconnect do you have (PCIe vs NVLink vs NVSwitch)?",
+            "hint": "Disagg is most valuable on NVLink/NVSwitch where the KV transfer is cheap.",
+            "type": "free"
+          }
+        ],
+        "ask_after": [
+          {
+            "key": "tput_colocated",
+            "question": "Aggregate throughput (tokens/sec) for the colocated baseline?",
+            "hint": "Sum of all generated tokens / wall-clock for the run.",
+            "type": "free"
+          },
+          {
+            "key": "tput_disagg",
+            "question": "Aggregate throughput (tokens/sec) for the disagg run?",
+            "hint": "Same metric, with prefill on GPU 0 and decode on GPU 1.",
+            "type": "free"
+          },
+          {
+            "key": "ttft_delta",
+            "question": "Did TTFT improve, and by how much?",
+            "hint": "Wall-clock from request to first chunk.",
+            "type": "free"
+          }
+        ]
+      }
+    },
+    {
+      "id": "serving_synthesis_report_v2",
+      "title": "Week 7 synthesis: when does each multi-GPU strategy win?",
+      "mode": "Synthesis",
+      "constraint": "Reference vllm_tp_attention + sglang_radix_cache + disagg_prefill_decode measurements",
+      "objective": "Write the synthesis: when does TP win, when does the radix cache dominate, when does disagg beat both, and when does a single GPU still beat all of them. Frame it as a 2x2 (latency-critical vs throughput-critical) x (short context vs long context).",
+      "commands": [],
+      "deliverable": "notes/serving_synthesis_report_v2.md with a 2x2 table and a 2-line note on the boundary cases (e.g. single GPU wins on a 0.5B model because the overhead of splitting exceeds the work).",
+      "skills": {
+        "llm_systems": 10,
+        "vllm_serving": 5,
+        "disaggregated_inference": 5,
+        "tensor_parallelism": 5
+      },
+      "track": "systems",
+      "prerequisites": [
+        "disagg_prefill_decode"
+      ],
+      "unlocks": [],
+      "milestone": "gpu_serving_track",
+      "score": {
+        "impact": 4,
+        "depth": 4,
+        "reproducibility": 2
+      },
+      "compute_paths": [
+        "runpod",
+        "lambda_labs"
+      ],
+      "deliverable_prompts": {
+        "ask_after": [
+          {
+            "key": "quadrant",
+            "question": "Which quadrant of the 2x2 did you find most surprising?",
+            "hint": "Latency-critical + long context is the disagg win; throughput-critical + short context is the single-GPU win.",
+            "type": "free"
+          },
+          {
+            "key": "boundary",
+            "question": "Where is the model-size boundary where TP stops helping?",
+            "hint": "For Qwen2.5-7B on H100s, TP=2 helps on attention; on a 0.5B model, the all-reduce overhead exceeds the split savings.",
+            "type": "free"
+          }
+        ]
+      }
     }
   ],
   "tracks": {
@@ -2497,7 +2809,11 @@
         "serving_paged_attention",
         "serving_streaming",
         "serving_batching_under_load",
-        "serving_systems_report"
+        "serving_systems_report",
+        "vllm_tp_attention",
+        "sglang_radix_cache",
+        "disagg_prefill_decode",
+        "serving_synthesis_report_v2"
       ],
       "domains": [
         "systems",

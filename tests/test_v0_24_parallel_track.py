@@ -93,9 +93,9 @@ def test_new_tasks_have_teaching_surfaces():
 
 
 def test_total_task_count_is_36():
-    """The curriculum is now 36 tasks (32 prior + 4 new)."""
+    """The curriculum is now 40 tasks (36 prior + 4 new from v0.25)."""
     roadmap = gpu.load_roadmap()
-    assert len(roadmap["tasks"]) == 36
+    assert len(roadmap["tasks"]) == 40
 
 
 def test_prerequisite_chain():
